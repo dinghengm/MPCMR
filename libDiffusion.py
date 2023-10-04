@@ -1,28 +1,22 @@
 #########################################################################################
 #########################################################################################
 # CIRC's Diffusion Libraries
-# MultiParametric Echo Planer Imaging (MP-EPI)
+#
 # Christopher Nguyen, PhD
 # Cleveland Clinic
 # 6/2022
-# Dingheng Mai
-# Case Western Reserve University, Biomedical Engineering
-# Sep/2023
-# 
 #########################################################################################
 #########################################################################################
 #
 # INSTALLATION PACKAGES PREREQ
 # install anaconda first
 #
-# Before running this script:
-#    * install anaconda
-#    * from terminal, run conda activate base (or environment of choice)
-#    * pip install -U tensorly
-#    * pip install roipoly SimpleITK-SimpleElastix imgbasics ipyfilechooser pydicom plotly imageio PyQt6 nibabel
-#    * conda install scikit-image
-#    * conda install tqdm <--should already be there
-
+# pip install roipoly
+# pip install SimpleITK-SimpleElastix
+# pip install imgbasics
+# conda install tqdm <--should already be there
+# pip install ipyfilechooser
+#
 
 # %%
 import numpy as np
@@ -51,7 +45,7 @@ import pickle # to save diffusion object
 import fnmatch # this is for string comparison dicomread
 import pandas as pd
 from skimage.transform import resize as imresize
-import re
+
 try:
     from numba import njit #super fast C-like calculation
     _global_bNumba_support = True
@@ -63,10 +57,13 @@ except:
 ##########################################################################################################
 # Class Library
 ##########################################################################################################
-class mapping:
+
+class diffusion:
     # method used to initalize object
     # data can be path to data or it can be numpy data
-    def __init__(self, data=None, bval=None, bvec=None,tval=None,CIRC_ID='',
+    def __init__(self, data=None, bval=None, bvec=None, 
+                 bFilenameSorted=True, 
+                 bMaynard=False,
                  ID=None,
                  UIPath=None): 
         
@@ -77,54 +74,33 @@ class mapping:
          * data: select the dicom of the folder that holds all dicoms of diffusion data OR select a previous *.diffusion 
          * ID: if you don't set ID number it will be taken from DICOM
          * bMaynard: default (bMaynard=False) to process on own laptop, pass bMaynard=True to process on Maynard
-        #1.1 update: change the slice location
+        
         '''
-        self.version = 1.1
+
+        self.version = 1.0
         self.ID = ID
-        self.CIRC_ID=CIRC_ID
-        if data is None:
-            fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.mapping','*.diffusion'],
-                                 path = UIPath)
-          #Development Mode
-        if type(data) == str: #given a path so try to load in the data
-            if data.split('.')[-1] == 'mapping':
-                print('Loading in CIRC mapping object')
-                self._load(filename=data)
-            
-            
-            
-            if data.split('.')[-1] in {'dcm' , 'DCM'}:
-                print('Your data is in dcm form')
-                path=os.path.dirname(data)
-                data, bval, bvec = self.dicomread(path)  #Matthew fix one bug that now probabily load file if input is string
-                self.__initialize_parameters(data=data,bval=bval,bvec=bvec)
-            #Matthew add in read file from gz and npy 
-            elif data.split('.')[-1] == 'gz':
-                print('Your data is in nii.gz form')
-                try:
-                    import nibabel as nib
-                    nii_img  = nib.load(data)
-                    nii_data = nii_img.get_fdata()
-                    self.__initialize_parameters(data=nii_data,bval=[10],bvec=[[1,0,0]])
-                    print('Data loaded successfully')
-                except:
-                    print('something went wrong with loading!!!Try pip install nibabel package before use')
-            
-            elif data.split('.')[-1] == 'npy':
-                print('our data is in .npy form')
-                try:
-                    npy_data=np.load(data,allow_pickle=True)
-                    self.__initialize_parameters(data=npy_data,bval=[10],bvec=[[1,0,0]])
-                    print('Data loaded successfully')
-                except:
-                    print('something went wrong with loading!!!Try upload .dcm or .diffusion form instead')
+
+        if bMaynard:
+            UIPath = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC/'
+            self.bMaynard = True
         else:
-            self.__initialize_parameters(data=data,tval=tval,bval=[10],bvec=[[1,0,0]])
+            self.bMaynard = False
+
+        if data is None:
+            fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.diffusion'],
+                                 path = UIPath, 
+                                 bFilenameSorted=bFilenameSorted)
+            #bval = self._bval <--- these two lines are done in uigetfile
+            #bvec = self._bvec
+
+        if type(data) == str: #given a path so try to load in the data
+            data, bval, bvec,datasets = self.dicomread(dirpath=data, bFilenameSorted=bFilenameSorted)
+            self.__initialize_parameters(data=data,bval=bval,bvec=bvec,datasets=datasets)
+
         # this is junk code needed to initialize to allow for the interactive code to work
         # TO DO: 
         # this can be avoided if I modify roipoly library with the 
         # updated plt.ion command instead of plt.show(block=True)
-        '''
         fig = plt.figure()
         plt.imshow([  [0,0,0,1,1,0,1,0,0,0,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,1,0,1,0,0],
                     [0,0,1,0,0,0,1,0,0,0,1,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0],
@@ -135,25 +111,30 @@ class mapping:
         plt.title('CLOSE ME')
         fig.canvas.manager.set_window_title('CLOSE ME')
         multiroi_named = MultiRoi(roi_names=['just close me', 'CLOSE ME NOW!!'])
-        '''
+
 
     # initialize class parameters (needed to be a separate fcn for UI file browser callback)
-    def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[],tval=[]):
+    def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[]):
         try:
             if len(data.shape) == 4:
                 [Nx, Ny, Nz, Nd] = data.shape
-                self._map = np.zeros((Nx,Ny,Nz))
+                self.md = np.zeros((Nx,Ny,Nz))
+                self.fa = np.zeros((Nx,Ny,Nz))
+                self.pvec = np.zeros((Nx,Ny,Nz,3))
+                self.ha = np.zeros((Nx,Ny,Nz))
             elif len(data.shape) == 3:
                 [Nx, Ny, Nd] = data.shape
                 Nz = 1
-                self._map = np.zeros((Nx,Ny))
+                self.md = np.zeros((Nx,Ny))
+                self.fa = np.zeros((Nx,Ny))
+                self.pvec = np.zeros((Nx,Ny,3))
+                self.ha = np.zeros((Nx,Ny))
             else:
                 raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
             self.Nx = Nx
             self.Ny = Ny
             self.Nz = Nz
             self.Nd = Nd
-            self.tval=tval
             self.shape = data.shape
             self._raw_data = np.copy(data) #original raw data is untouched just in case we need
             self._data = np.copy(data) #this is the data we will be calculating everything off
@@ -175,9 +156,9 @@ class mapping:
                 # swap x and y if phase encode is LR
                 #try: 
                 #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
-                #temp = np.copy(self.bvec[:,0])
-                #self.bvec[:,0] = self.bvec[:,1]
-                #self.bvec[:,1] = temp
+                temp = np.copy(self.bvec[:,0])
+                self.bvec[:,0] = self.bvec[:,1]
+                self.bvec[:,1] = temp
                 #except:
                 #    if self.Nx > self.Ny:
                 #        temp = np.copy(self.bvec[:,0])
@@ -188,14 +169,12 @@ class mapping:
             
             self.mask_endo = []
             self.mask_epi = []
-            self.mask_lv = []
+            self.lv = []
             self.mask_septal = []
             self.mask_lateral = []
             self.CoM = []
             self.cropzone = []
             self.path = path
-
-
 
             print('Data loaded successfully')
         except:
@@ -216,25 +195,18 @@ class mapping:
 # ========================================================================================================
 # "PUBLIC" CLASS FUNCTIONS ===============================================================================
 # ========================================================================================================
-    
+        
     # crop class method
     def go_crop(self):
         '''
         Click top left and bottom right corners on pop-up window to crop
         '''
-        print('Cropping of data:')
+        print('Staring croping of diffusion data')
         self._data, self.cropzone = self._crop()
         self.Nx = self._data.shape[0]
         self.Ny = self._data.shape[1]
         self.shape = self._data.shape
-        
-    def go_crop_Auto(self,data=None,cropStartVx=40):
-        cropData=self._crop_Auto(data=data,cropStartVx=cropStartVx)
-        self._data=cropData
-        self.Nx = self._data.shape[0]
-        self.Ny = self._data.shape[1]
-        self.shape = self._data.shape
-        return 
+
 
     # resize class method
     def go_resize(self, scale=2, newshape=None):
@@ -244,7 +216,6 @@ class mapping:
             * scale: images will be resized to scale * (Nx, Ny)
             * newshape: tuple(Nx_new, Ny_new) images will be resized to (Nx_new, Ny_new)
         '''
-        print('Resizing of data:')
         if newshape == None:
             newshape = scale*np.array([self.Nx, self.Ny])
         self.Nx = newshape[0]
@@ -261,7 +232,7 @@ class mapping:
             * rank_diff: for lrt correction, default=1
             * rank_diff_resp: for lrt correction, default=2 
         '''
-        print('Motion correction of data: ')
+        print('Starting motion correction of diffusion data: ')
         if method == 'lrt':
             print(' ... Performing low rank tensor motion correction')
             self._data_regress = np.copy(self._data)
@@ -331,11 +302,11 @@ class mapping:
                 else:
                     self._data[:,:,z,:] = self._coregister_elastix(data=data)
                 #print(' ......... ' + str(toc(t)))
-
+    
 
     # denoising class method
     def go_denoise(self, method='tv', weight=0.1, wavelt_rescale_sigma=True, lrt_rk=None):
-        print('Denoising of data: ')
+        print('Starting denoising of diffusion data: ')
         if method == 'tv':
             print(' ... Performing TV denoising')
             for z in tqdm(range(self.Nz)):
@@ -357,34 +328,12 @@ class mapping:
             self._data = tl.tucker_to_tensor((core, factors))
 
 
-    #Calculate ADC method
-    #Calculate ADC method
-    def go_calc_ADC(self):
-        #Assume the first 3 is b50, the later 3 is b500
-        print("Starting calculation of ADC")
-        #Get the ADC value in three direction
-        ADC_temp=np.zeros((self.Nx,self.Ny,self.Nz,3))
-        S50=np.zeros((self.Nx,self.Ny))
-        S500=np.zeros((self.Nx,self.Ny))
-        #Fix for ADC calculation
-        for z in range(self.Nz):
-            for d in range(int(self.Nd/2)):
-                S50= self._data[...,z,d]
-                S500= self._data[...,z,d+3]
-                ADC_temp[:,:,z,d]=-1/450 * np.log(S500/S50)
-        #S50=np.cbrt(S50)
-        #S500=self._data[...,-1]*self._data[...,-2]*self._data[...,-3]
-        #S500=np.cbrt(S500)
-        ADCmap=np.zeros((self.Nx,self.Ny,self.Nz))
-        ADCmap=np.mean(ADC_temp,axis=-1)
-        self.ADC=ADCmap
-        return ADCmap
     # calculate diffusion tensor class method
     def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False):
         '''
         Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
         '''
-        print('Calculating diffusion tensor for data: ')
+        print('Starting calculation of diffusion tensor for diffusion data: ')
 
         #first unwrap everything for faster calculation using Numba
         G = self.bvec
@@ -437,15 +386,13 @@ class mapping:
                 self.ha = calcHA(self.pvec, self.CoM)
         else:
             self.ha = np.copy(self.fa)*0
-        
-        self.hat = calcHAT(self.ha, self.mask_lv)
         #except:
         #    self.ha = np.zeros(fa.shape)
         #    print('No LV mask!! Cannot run HA calculation: run *.go_segment_LV() class method first')
         
 
     # segment LV endo and epi borders
-    def go_segment_LV(self, z=-1,image_type="b0",crange=None):
+    def go_segment_LV(self, z=-1):
         '''
         Segment the LV
         
@@ -457,55 +404,37 @@ class mapping:
             5. Click finish to go to next slice
         '''
         # you will need to use this decorator to make this work --> %matplotlib qt
-        print('Segment of the LV')
-        data=self._data
-        if crange==None:
-            crange[np.min(data),np.max(data)]
         if z == -1: #new ROI
-            self.mask_endo = np.full((data).shape[:3], None, dtype=bool) # [None]*self.Nz
-            self.mask_epi = np.full((data).shape[:3], None, dtype=bool) #[None]*self.Nz
-            self.mask_lv = np.full((data).shape[:3], None, dtype=bool) #[None]*self.Nz
-            self.mask_septal = np.full((data).shape[:3], None, dtype=bool) #[None]*self.Nz
-            self.mask_lateral = np.full((data).shape[:3], None, dtype=bool) #[None]*self.Nz
+            self.mask_endo = [None]*self.Nz
+            self.mask_epi = [None]*self.Nz
+            self.mask_lv = [None]*self.Nz
+            self.mask_septal = [None]*self.Nz
+            self.mask_lateral = [None]*self.Nz
             self.CoM = [None]*self.Nz
             slices = range(self.Nz)
         else: # modify a specific slice for ROI
             slices = [z]
+
         for z in slices:
-
-            if image_type == "b0":
-                image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
-                fig = plt.figure()
-                plt.imshow(image, cmap='gray',vmin=crange[0],vmax=crange[1])
-            elif image_type == "b0_avg":
-                image = np.mean(self._data[:,:,z,:], axis=-1)
-                fig = plt.figure()
-                plt.imshow(image, cmap='gray',vmin=crange[0],vmax=crange[1])
-            elif image_type == "map":
-                image = self._map[:,:,z]
-                fig = plt.figure()
-                plt.imshow(image, cmap='gray',vmin=crange[0],vmax=crange[1])
-
-
-
-            plt.title('Slice '+ str(z))
-            fig.canvas.manager.set_window_title('Slice '+ str(z))
-            multirois = MultiRoi(fig=fig, roi_names=['endo', 'epi', 'septal', 'lateral'])
-            self.mask_endo[..., z] = multirois.rois['endo'].get_mask(image)
-            self.mask_epi[..., z] = multirois.rois['epi'].get_mask(image)
-            self.mask_lv[..., z] = self.mask_epi[..., z]^self.mask_endo[..., z]
-            self.mask_septal[..., z] = multirois.rois['septal'].get_mask(image)
-            self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
-            ind = np.where(self.mask_endo[..., z]>0)
+            image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+            fig = plt.figure()
+            plt.imshow(image, cmap='gray')
+            plt.title('Slice '+str(z))
+            fig.canvas.manager.set_window_title('Slice '+str(z))
+            multirois = MultiRoi(fig=fig, roi_names=['endo', 'epi','septal','lateral'])
+            self.mask_endo[z] = multirois.rois['endo'].get_mask(image)
+            self.mask_epi[z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv[z] = self.mask_epi[z]^self.mask_endo[z]
+            self.mask_septal[z] = multirois.rois['septal'].get_mask(image)
+            self.mask_lateral[z] = multirois.rois['lateral'].get_mask(image)
+            ind = np.where(self.mask_endo[z]>0)
             self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
-            plt.close()
 
-        
+
     def go_define_CoM(self):
         '''
         Double click to define the COM for each slice
         '''
-        print('Define CoM for quick HA estimate')
         self.CoM = [None]*self.Nz
         for z in range(self.Nz):
             image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
@@ -538,10 +467,7 @@ class mapping:
             if bMaynard or self.bMaynard:
                 path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
             if filename is None:
-                try:
-                    filename=path+'/' + ID + '.mapping'
-                except:
-                    filename=r'{path}\{ID}.mapping'
+                filename=path+'/' + ID + '.diffusion'
 
             with open(filename, 'wb') as outp:  # Overwrites any existing file.
                 pickle.dump(self, outp, pickle.HIGHEST_PROTOCOL)
@@ -556,13 +482,15 @@ class mapping:
         '''
         Print gloabl LV MD and LV FA values
         '''
-        print(f'Global LV MD: {np.mean(self._map[self.mask_lv]): .2f} +/- {np.std(self._map[self.mask_lv]): .2f} um^2/ms')
+        print('Global LV MD: ' + np.mean(self.md[self.mask_lv]*1000) + ' +/- ' +  
+                                 np.std(self.md[self.mask_lv]*1000) + ' um^2/ms')
+        print('Global LV FA: ' + np.mean(self.fa[self.mask_lv]) + ' +/- ' +  
+                                 np.std(self.fa[self.mask_lv]) + ' ')
 
 
-
-    def export_stats(self, filename=None, path=None, ID=None,CIRC_ID=None, bMaynard=False,crange=None): 
+    def export_stats(self, filename=None, path=None, ID=None, bMaynard=False): 
         '''
-        Export stats to .csv file. If filename already exists, the stats data is appended to the existing file
+        Export stats to .csv file
         
         Inputs:
             * filename: full path where the csv file will be saved (ending in '.csv')
@@ -578,74 +506,43 @@ class mapping:
                 path = self.path
             if ID == None:
                 ID = self.ID
-            if CIRC_ID == None:
-                CIRC_ID = self.CIRC_ID
-            if bMaynard:
-                path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/CIRC'
+            if bMaynard or self.bMaynard:
+                path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
             if filename is None:
-                filename=os.path.join(path, ID) + '.csv'
-            map=self._map
-            map=map[(map>=crange[0]) & (map<=crange[1])]
-            keys=['CIRC_ID','ID']
-            stats=[CIRC_ID,ID]
-            for z in range(self.Nz):
-                slice_stats = [
-                    np.mean(self._map[:,:,z][self.mask_lv[:,:,z]]),
-                    np.mean(self._map[:,:,z][self.mask_septal[:,:,z]]),
-                    np.mean(self._map[:,:,z][self.mask_lateral[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_lv[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_septal[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_lateral[:,:,z]])] 
+                filename=path+'/' + ID + '.csv'
 
+            stats = [ID,
+                    np.mean(self.md[self.mask_lv]*1000),
+                    np.mean(self.md[self.mask_septal]*1000),
+                    np.mean(self.md[self.mask_lateral]*1000),
+                    np.mean(self.fa[self.mask_lv]),
+                    np.mean(self.fa[self.mask_septal]),
+                    np.mean(self.fa[self.mask_lateral]),
+                    ]
 
-                slice_keys=[str(f'Slice {z} global'),
-                str(f'Slice {z} septal'),
-                str(f'Slice {z} lateral'),
-                str(f'Slice {z} global std'),
-                str(f'Slice {z} septal std'),
-                str(f'Slice {z} lateral std')]
-
-
-
-                stats.extend(slice_stats)
-                keys.extend(slice_keys)
-            slice_stats = [
-                    np.mean(self._map[self.mask_lv]),
-                    np.mean(self._map[self.mask_septal]),
-                    np.mean(self._map[self.mask_lateral]),
-                    np.std(self._map[self.mask_lv]),
-                    np.std(self._map[self.mask_septal]),
-                    np.std(self._map[self.mask_lateral])] 
-
-
-            slice_keys=[str(f'global'),
-                str(f'septal'),
-                str(f'lateral'),
-                str(f'global std'),
-                str(f'septal std'),
-                str(f'lateral std')]
+            try:
+                df = pd.read_csv(filename, index=False)
+                df.loc[df['ID']==ID] = stats
             
-            stats.extend(slice_stats)
-            keys.extend(slice_keys)
-
-
-            data=dict(zip(keys,stats))
-            self.dti_stats = pd.DataFrame(data, index=[0])
-                
-            if os.path.isfile(filename):    
-                self.dti_stats.to_csv(filename, index=False, header=False, mode='a')
-            else:
-                self.dti_stats.to_csv(filename, index=False)
-            
+            except:
+                self.dti_stats = pd.DataFrame({        
+                                        'ID': stats[0], 
+                                        'MD global': stats[1],
+                                        'MD septal': stats[2],
+                                        'MD lateral': stats[3],
+                                        'FA global': stats[4],
+                                        'FA septal': stats[5],
+                                        'FA lateral': stats[6],
+                                         })
+            self.dti_stats.to_csv(filename, index=False, header=False)
             print('Saved '+ filename +' successfully!')
-        
         except:
             print('Failed export!!!')
 
 
     # read in dicoms
-    def dicomread(self, dirpath='.', bFilenameSorted=True):
-        # print('Path to the DICOM directory: {}'.format(dirpath))
+    def dicomread(self, dirpath='.',bFilenameSorted=True):
+        #print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
         dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
         if dicom_filelist == []:
@@ -678,73 +575,46 @@ class mapping:
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
 
-        # check mosaic
-        if 'MOSAIC' in datasets[0].ImageType:
-            print('Detected Mosaic...')
-            acqMat = np.array(datasets[0].AcquisitionMatrix)
-            acqMat = acqMat[acqMat > 0]
-            Nx = acqMat[0]
-            Ny = acqMat[1]
-            Rows = datasets[0].Rows
-            Cols = datasets[0].Columns
-            Nd = NdNz
-            data2 = np.zeros((Nx,Ny,1000,Nd)) #larger numebr of slices than needed
-            if Nx > Rows or np.mod(Rows,Nx) != 0:
-                Nx = acqMat[2]
-                Ny = acqMat[1]
-            
-            z = 0
-            for x in range(Nx,Rows,Nx):
-                for y in range(Ny,Cols,Ny):
-                    data2[:,:,z,:] = data[(x-Nx):x,(y-Ny):y,:]
-                    z = z+1
-            Nz = z-1
-            data_final = data2[:,:,0:Nz,:]
+        sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
+        Nz = len(sliceLocs)
+        
+        if bFilenameSorted:
             diffBValTarget = diffBValArray
             diffGradTarget = diffGradArray
-            diffDicomHDRRange = range(Nd)
+            Nd = int(NdNz/Nz)
+            data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
 
         else:
-            sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-            Nz = len(sliceLocs)
-        
-            if bFilenameSorted:
-                diffBValTarget = diffBValArray
-                diffGradTarget = diffGradArray
-                Nd = int(NdNz/Nz)
-                data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-            else:
-                # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
-                # take first slice and find the order of b-values and gradients --> this is our new order
-                # NB: Each slice could have their own order so we need to reorder each slice
-                # this is SUPER slow but at least everything is in the right order
-                print('...Trying exhausted search and sort of dicom')
-                index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
-                diffBValTarget = np.array(diffBValArray)[index]
-                diffGradTarget = np.array(diffGradArray)[index]
-                Nd = len(diffBValTarget)
+            # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
+            # take first slice and find the order of b-values and gradients --> this is our new order
+            # NB: Each slice could have their own order so we need to reorder each slice
+            # this is SUPER slow but at least everything is in the right order
+            print('...Trying exhausted search and sort of dicom')
+            index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
+            diffBValTarget = np.array(diffBValArray)[index]
+            diffGradTarget = np.array(diffGradArray)[index]
+            Nd = len(diffBValTarget)
 
-                data_final = np.zeros((Nx,Ny,Nz,Nd))
-                data_final[:,:,0,:] = data[:,:,index]
+            data_final = np.zeros((Nx,Ny,Nz,Nd))
+            data_final[:,:,0,:] = data[:,:,index]
 
-                for z in tqdm(range(Nz)):
-                    if z == 0:
-                        continue
-                    sliceIndex = np.array(sliceLocsArray == 
-                                        sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
-                    dataSlice = data[:,:,sliceIndex]
-                    for d in range(Nd):
-                        for dd in range(Nd):
-                            if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
-                                if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
-                                    data_final[:,:,z,d] = dataSlice[:,:,dd]
-            diffDicomHDRRange = range(0,NdNz,Nz)
+            for z in tqdm(range(Nz)):
+                if z == 0:
+                    continue
+                sliceIndex = np.array(sliceLocsArray == 
+                                    sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
+                dataSlice = data[:,:,sliceIndex]
+                for d in range(Nd):
+                    for dd in range(Nd):
+                        if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
+                            if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
+                                data_final[:,:,z,d] = dataSlice[:,:,dd]
 
         # create numpy arrays and rotate diffusion gradients into image plane
         diffGrad = np.zeros((Nd,3))
         diffBVal = np.zeros((Nd,))
-        for d in diffDicomHDRRange:
-            dd = int(d/diffDicomHDRRange.step) #int(d/Nz)
+        for d in range(0,NdNz,Nz):
+            dd = int(d/Nz)
             diffBVal[dd] = diffBValTarget[d]
             diffGrad[dd,0] = np.dot(xaxis, diffGradTarget[d])
             diffGrad[dd,1] = np.dot(yaxis, diffGradTarget[d])
@@ -764,26 +634,9 @@ class mapping:
 
         if not (path.split('.')[-1] == 'gif'):
             path = path + '.gif' 
-        imageio.mimsave(path, np.transpose(data,[2,0,1]), duration = 1./fps,loop=4)
-    #Visualize MP:
-    def show_MP(self):
-        try:
-            plt.close()
-            fig,axs=plt.subplots(3,3,figsize=[15,20])
-            for i in range(3):
-                im1=axs[i,0].imshow(self.mp_epi[:,:,i,0],cmap='magma',vmin=0,vmax=3000)
-                axs[i,0].axis('off')
-                im2=axs[i,1].imshow(self.mp_epi[:,:,i,1],cmap='viridis',vmin=0,vmax=150)
-                axs[i,1].axis('off')
-                im3=axs[i,2].imshow(self.mp_epi[:,:,i,2]*1000,cmap='gray',vmin=0,vmax=3)
-                axs[i,2].axis('off')
-            #cb_ax=fig.add_axes([0.83, 0.1, 0.02, 0.8])
-            cbar1=fig.colorbar(im1,ax=axs[:,0])
-            cbar2=fig.colorbar(im2,ax=axs[:,1])
-            cbar3=fig.colorbar(im3,ax=axs[:,2])
-            plt.show()
-        except:
-            print('Your MP map is not ready yet')
+        imageio.mimsave(path, np.transpose(data,[2,0,1]), duration = 1./fps)
+
+
     # visualize using plotly
     def imshow(self, volume=None, zmin=None, zmax=None, 
                     fps=30, cmap='gray', frameHW=None):
@@ -935,7 +788,9 @@ class mapping:
         # Print the selected path, filename, or both
         #print(fc.selected_path)
         #print(fc.selected_filename)
-        #print(fc.selected)     
+        #print(fc.selected)
+
+        
         
         fc.default_path = path # 
         fc.default_filename = 'test.dat'
@@ -986,7 +841,6 @@ class mapping:
 
     # crop function
     def _crop(self, data=None, cropzone=None):
-        shape=[]
         if data is None:
             data = np.copy(self._data)
         
@@ -997,25 +851,16 @@ class mapping:
                     img_crop, cropzone = imcrop(np.sum(data, axis=2))
                     Nx, Ny = img_crop.shape
                     shape = (Nx, Ny, Nd)
-                elif len(np.shape(data))==3:
-                    Nx, Ny, Nz = data.shape
-                    img_crop, cropzone = imcrop(np.sum(data, axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nz)
                 else:
                     Nx, Ny, Nz, Nd = data.shape
                     img_crop, cropzone = imcrop(np.sum(np.sum(data, axis=2), axis=2))
                     Nx, Ny = img_crop.shape
                     shape = (Nx, Ny, Nz, Nd)
             else:
-                try:
-                    cropzone = self.cropzone
-                    temp = imcrop(data[:,:,0,0], cropzone)
-                    shape = (temp.shape[0], temp.shape[1], data.shape[2], data.shape[3])
-                except:
-                    cropzone = self.cropzone
-                    temp = imcrop(data[:,:,0], cropzone)
-                    shape = (temp.shape[0], temp.shape[1], data.shape[2])
+                cropzone = self.cropzone
+                temp = imcrop(data[:,:,0,0], cropzone)
+                shape = (temp.shape[0], temp.shape[1], data.shape[2], data.shape[3])
+            
         # apply crop
         data_crop = np.zeros(shape) #use updated shape
         
@@ -1024,29 +869,7 @@ class mapping:
                 data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
 
         return data_crop, cropzone    
-
-
-
-
-    #automatically crop the data
-    def _crop_Auto(self,data=None,cropStartVx=40):
-        if data is None:
-            data = np.copy(self._data)
-        Nx,Ny,Nz,Nd=np.shape(data)
-        if Nx > Ny:
-            cropWin = int(Nx/3)
-            if cropStartVx is None:
-                cropStartVx = cropWin
-            cropData = data[cropStartVx:(cropStartVx+cropWin),...]
-        else:
-            if cropStartVx is None:
-                cropStartVx = cropWin
-            cropWin = int(Ny/3)
-            cropData = data[:,cropStartVx:(cropStartVx+cropWin),...]
-        return cropData
-
-
-
+    
     def _resize(self,  data=None, newshape=None):
         if data is None:
             data = np.copy(self._data)
@@ -1385,33 +1208,7 @@ def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
                 ha_map[x,y,z] = HA
     return ha_map
 
-# calculate helix angle transmurality
-def calcHAT(ha, lv_mask, NRadialSpokes=100,reject_slice=None):
-    Nx, Ny, Nz = ha.shape
-    thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
-    hatMean = 0.
-    NTotalSpokes = 0
-    for z in range(Nz):
-        if not np.any(np.array(reject_slice)==z):
-            ind = np.where(lv_mask[:,:,z])
-            CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
-            for theta in thetaArray:
-                spoke = []
-                for r in range(np.min([Nx,Ny])):
-                    x = int(r*np.cos(theta)+CoM[0])
-                    y = int(r*np.sin(theta)+CoM[1])
-                    if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
-                        continue
-                    if lv_mask[x,y,z]:
-                        spoke.append(ha[x,y,z])
-                if len(spoke) >2:
-                    transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
-                    hat, _ = np.polyfit(transmuralDepth, spoke, 1)
-                    hatMean += hat
-                    NTotalSpokes +=1
-    return hatMean / NTotalSpokes
     
-        
 
 
 
@@ -1539,112 +1336,4 @@ def imshow_old(volume):
     )
 
     fig.show()
-
-
-
-#Read the folder, and generate a volume with Nx,Ny,Nz,Nd
-#Return Volume, valueList
-#Matthew Modification Sep 8th: Use the 
-def readFolder(dicomPath,sortBy='tval',eject=False,default=327):
-
-
-    triggerList=[]
-    seriesIDList = []
-    seriesFolderList = []
-    dcmFilesList=[]
-    valueList=[]
-    datasets=[]
-    seriesNumberList=[]
-    for dirpath,dirs,files in  os.walk(dicomPath):
-        for x in files:
-            path=os.path.join(dirpath,x)
-            if path.endswith('dcm') or path.endswith('DCM'):
-                if eject:
-                    if read_trigger(path,eject=eject,default=default)==False:
-                        continue
-                    else:
-                        triggerList.append(read_trigger(path))
-                        dcmFilesList.append(path)
-                else:
-                    triggerList.append(read_trigger(path))
-                    dcmFilesList.append(path)
-                try:
-                    seriesNumberList.append(read_seriers(path))
-                    valueList.append(get_value(path))
-                except:
-                    print('Something Wrong with read Trigger')
-    if sortBy=='seriesNumber':
-        try:
-            dcmFilesList=sorted(dcmFilesList,key=read_seriers)
-            print(sorted(seriesNumberList))
-        except:
-            print('sortBy seriers number not working, try sortBy=tval')
-    elif sortBy=='tval':
-        try:            
-            valueList=sorted(list(valueList))
-            dcmFilesList=sorted(dcmFilesList,key=get_value)
-        except:
-
-            print('DWI is included, the output is not sorted')
-
-    datasets = [pydicom.dcmread(path)
-                                    for path in tqdm(dcmFilesList)]
-
-    sliceLocsArray=[]
-    
-    img = datasets[0].pixel_array
-    Nx, Ny = img.shape
-    NdNz = len(datasets)
-    data = np.zeros((Nx,Ny,NdNz))
-    for ds in datasets:
-                sliceLocsArray.append(float(ds.SliceLocation))
-    sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-    Nz = len(sliceLocs)
-    Nd=int(NdNz/Nz)
-    print(sliceLocs)
-    data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    j_dict={}
-    for i in range(Nz):
-        j_dict[str(i)]=0
-    for ds in datasets:
-        i=list(sliceLocs).index(float(ds.SliceLocation))
-        data_final[:,:,i,j_dict[str(i)]] = ds.pixel_array
-        j_dict[str(i)]+=1
-    Nd = int(NdNz/Nz)
-    data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    print(triggerList)
-    return data_final,valueList,dcmFilesList
-
-#Match the file and 
-def get_value(input_string):
-    pattern = r"(?i)(Ti|TE)[_]?(\d+)ms"
-    match = re.search(pattern, input_string)
-    if match:
-        return int(match.group(2))
-    else:
-        # Return a very large value if 'Ti' or 'ti' is not found
-        return 'inf'
-def read_seriers(filePath):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    seriesNumber=reader.GetMetaData('0020|0011') 
-    seriesNumber = int(seriesNumber)
-    return seriesNumber
-
-def read_trigger(filePath,eject=False,default=327):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    triggerTime=float(reader.GetMetaData('0018|1060'))
-    nominalTime=float(reader.GetMetaData('0018|1062'))
-    readList=[float(default+i*nominalTime) for i in range(-5,5,1)]
-    if eject:
-        if min([abs(triggerTime - t)  for t in readList]) >50:
-            return False
-        else:
-            return triggerTime
-    return triggerTime
 # %%
