@@ -29,15 +29,23 @@ ADC=MP03.go_cal_ADC()
 MP03._map=ADC*1000
 MP03.imshow_map()
 # %%
-
 #%matplotlib qt <--- you need this if you haven't turned it on in vscode
 MP03.go_segment_LV(reject=None, image_type="b0")
-
 # save
 MP03.save()
-
 # look at stats
 MP03.show_calc_stats_LV()
-
 MP03.imshow_overlay()
 # %%
+dicomPath=r'C:\Research\MRI\MP_EPI\CIRC_00302_22737_CIRC_00302_22737\MP01_T1_Bright_All_2'
+#CIRC_ID='CIRC_00302'
+#ID = os.path.dirname(dicomPath).split('\\')[-1]
+MP01 = mapping(data=dicomPath)
+MP01.go_crop()
+MP01.go_resize(scale=2)
+MP01.go_moco()
+MP01.imshow_corrected()
+# %%
+#TO DO
+#Implement reject slice + updata shape/NXNYNZ
+#Add 

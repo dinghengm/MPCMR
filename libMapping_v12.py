@@ -71,7 +71,7 @@ class mapping:
     # data can be path to data or it can be numpy data
     def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
                 ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',eject=True): 
+                UIPath=None,TE=None,sortBy='tval',reject=True): 
         
         '''
         Define class object and read in data
@@ -102,38 +102,33 @@ class mapping:
             #Matthew add in read file from gz and npy 
             elif data.split('.')[-1] == 'gz':
                 print('Your data is in nii.gz form')
-                try:
-                    import nibabel as nib
-                    nii_img  = nib.load(data)
-                    nii_data = nii_img.get_fdata()
-                    self.__initialize_parameters(data=nii_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
-                    print('Data loaded successfully')
-                    self.path = os.path.dirname(os.path.abspath(data))
-                except:
-                    print('something went wrong with loading!!!Try pip install nibabel package before use')
+                import nibabel as nib
+                nii_img  = nib.load(data)
+                nii_data = nii_img.get_fdata()
+                self.__initialize_parameters(data=nii_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
+                print('Data loaded successfully')
+                self.path = os.path.dirname(os.path.abspath(data))
             elif data.split('.')[-1] == 'npy':
                 print('our data is in .npy form')
-                try:
-                    npy_data=np.load(data,allow_pickle=True)
-                    self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
-                    print('Data loaded successfully')
-                    self.path = os.path.dirname(os.path.abspath(data))
-                except:
-                    print('something went wrong with loading!!!Try upload .dcm or .diffusion form instead')
+                npy_data=np.load(data,allow_pickle=True)
+                self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
+                print('Data loaded successfully')
+                self.path = os.path.dirname(os.path.abspath(data))
             else:
             ##It will be the path to the folders
-                try:
-                    pattern = r'CIRC_\d+'
+                pattern = r'CIRC_\d+'
 
-                    # Use re.findall() to find all matches of the pattern in the string
-                    matches = re.findall(pattern, tmp)
-                    CIRC_ID=matches[0]
-                    ID = tmp.split('\\')[-1]
-                    npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,eject=eject)
-                    self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
-                    self.path = tmp
-                except:
-                    raise Exception('Please try again')
+                # Use re.findall() to find all matches of the pattern in the string
+                matches = re.findall(pattern, tmp)
+                CIRC_ID=matches[0]
+                ID = tmp.split('\\')[-1]
+                if self.ID==None:
+                    self.ID=ID
+                if self.CIRC_ID == None:
+                    self.CIRC_ID=CIRC_ID
+                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject)
+                self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
+                self.path = tmp
         else:
             self.__initialize_parameters(data=data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
         # this is junk code needed to initialize to allow for the interactive code to work
@@ -155,88 +150,80 @@ class mapping:
 
     # initialize class parameters (needed to be a separate fcn for UI file browser callback)
     def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[],valueList=[]):
+        if len(data.shape) == 4:
+            [Nx, Ny, Nz, Nd] = data.shape
+            self._map = np.zeros((Nx,Ny,Nz))
+        elif len(data.shape) == 3:
+            [Nx, Ny, Nd] = data.shape
+            Nz = 1
+            self._map = np.zeros((Nx,Ny))
+        else:
+            raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
+        self.Nx = Nx
+        self.Ny = Ny
+        self.Nz = Nz
+        self.Nd = Nd
+        self.shape = data.shape
+        self._raw_data = np.copy(data) #original raw data is untouched just in case we need
+        self._data = np.copy(data) #this is the data we will be calculating everything off
+        self.dcm_list = datasets
+        if self.CIRC_ID == None:
+            self.CIRC_ID = self.dcm_list[0].PatientID
         try:
-            if len(data.shape) == 4:
-                [Nx, Ny, Nz, Nd] = data.shape
-                self._map = np.zeros((Nx,Ny,Nz))
-            elif len(data.shape) == 3:
-                [Nx, Ny, Nd] = data.shape
-                Nz = 1
-                self._map = np.zeros((Nx,Ny))
-            else:
-                raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
-            self.Nx = Nx
-            self.Ny = Ny
-            self.Nz = Nz
-            self.Nd = Nd
-            self.shape = data.shape
-            self._raw_data = np.copy(data) #original raw data is untouched just in case we need
-            self._data = np.copy(data) #this is the data we will be calculating everything off
-            self.dcm_list = datasets
-            if self.CIRC_ID == None:
-                self.CIRC_ID = self.dcm_list[0].PatientID
-            try:
-                reader = sitk.ImageFileReader()
-                reader.SetFileName( self.dcm_list[0] )
-                reader.LoadPrivateTagsOn()
-                reader.ReadImageInformation()
-                TEtime=float(reader.GetMetaData('0018|0081'))
-                TE = TEtime
-            except:
-                #Hard Code TE
-                TE=40
-            try:
-                self.bval = np.concatenate((np.zeros(1),
-                                        np.ones(Nd)*500)) #default b = 500
-                self.bvec = np.concatenate((np.zeros([1,3]),
-                                        self._getGradTable(Nd))) #default b = 500
-            except:
-                self.bval = bval
-                self.bvec = bvec
-            try: 
-                #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
-                temp = np.copy(self.bvec[:,0])
-                self.bvec[:,0] = self.bvec[:,1]
-                self.bvec[:,1] = temp
-            except:
-                raise Exception('The bvec is empty')
-                #    if self.Nx > self.Ny:
-                #        temp = np.copy(self.bvec[:,0])
-                #        self.bvec[:,0] = self.bvec[:,1]
-                #        self.bvec[:,1] = temp
-            try:
-                    #Initiate the label:
-                if 'mp01' in self.ID.lower():
-                    valueList=sorted(valueList)
-                    valueList=[i+TE for i in valueList[::Nz]]
-                    self.valueList=valueList
-                    print('value:',valueList)
-                elif 'mp02' in self.ID.lower():
-                    #valueList=[30,35,40,50,60,70,80,100]
-                    valueList=sorted(valueList)
-                    valueList=[i for i in valueList[::Nz]]
-                    print('value:',valueList)
-                    self.valueList=valueList
-                elif 'mp03' in self.ID.lower():
-                    valueList=['b50x','b50y','b50z','b500x','b500y','b500z']
-                    print('value:',valueList)
-                    self.valueList=valueList
-            except:
-                raise Exception('initiate label fails')
-            
-
-            
-            self.mask_endo = []
-            self.mask_epi = []
-            self.mask_lv = []
-            self.mask_septal = []
-            self.mask_lateral = []
-            self.CoM = []
-            self.cropzone = []
-            print('Data loaded successfully')
+            reader = sitk.ImageFileReader()
+            reader.SetFileName( self.dcm_list[0] )
+            reader.LoadPrivateTagsOn()
+            reader.ReadImageInformation()
+            TEtime=float(reader.GetMetaData('0018|0081'))
+            TE = TEtime
         except:
-            raise Exception('something went wrong with loading!!! Try setting bFilenameSorted=False')
+            #Hard Code TE
+            TE=40
+        try:
+            self.bval = np.concatenate((np.zeros(1),
+                                    np.ones(Nd)*500)) #default b = 500
+            self.bvec = np.concatenate((np.zeros([1,3]),
+                                    self._getGradTable(Nd))) #default b = 500
+        except:
+            self.bval = bval
+            self.bvec = bvec
+        try:
+            #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
+            temp = np.copy(self.bvec[:,0])
+            self.bvec[:,0] = self.bvec[:,1]
+            self.bvec[:,1] = temp
+                #Initiate the label:
+        except:
+            print('bvec is empty')
+        try:
+            if 'mp01' in self.ID.lower():
+                valueList=sorted(valueList)
+                valueList=[i+TE for i in valueList[::Nz]]
+                self.valueList=valueList
+                print('value:',valueList)
+            elif 'mp02' in self.ID.lower():
+                #valueList=[30,35,40,50,60,70,80,100]
+                valueList=sorted(valueList)
+                valueList=[i for i in valueList[::Nz]]
+                print('value:',valueList)
+                self.valueList=valueList
+            elif 'mp03' in self.ID.lower():
+                valueList=['b50x','b50y','b50z','b500x','b500y','b500z']
+                print('value:',valueList)
+                self.valueList=valueList
+        except:
+            print('The data is the clinical data')
+        
 
+        
+        self.mask_endo = []
+        self.mask_epi = []
+        self.mask_lv = []
+        self.mask_septal = []
+        self.mask_lateral = []
+        self.CoM = []
+        self.cropzone = []
+        print('Data loaded successfully')
 
     # string returned if printed    
     def __str__(self):
@@ -1808,7 +1795,7 @@ def imshow_old(volume):
 #Read the folder, and generate a volume with Nx,Ny,Nz,Nd
 #Return Volume, valueList
 #Matthew Modification Sep 8th: Use the 
-def readFolder(dicomPath,sortBy='tval',eject=False,default=327):
+def readFolder(dicomPath,sortBy='tval',reject=False,default=327):
     triggerList=[]
     seriesIDList = []
     seriesFolderList = []
@@ -1820,8 +1807,8 @@ def readFolder(dicomPath,sortBy='tval',eject=False,default=327):
         for x in files:
             path=os.path.join(dirpath,x)
             if path.endswith('dcm') or path.endswith('DCM'):
-                if eject:
-                    if read_trigger(path,eject=eject,default=default)==False:
+                if reject:
+                    if read_trigger(path,reject=reject,default=default)==False:
                         continue
                     else:
                         triggerList.append(read_trigger(path))
@@ -1850,13 +1837,14 @@ def readFolder(dicomPath,sortBy='tval',eject=False,default=327):
 
     datasets = [pydicom.dcmread(path)
                                     for path in tqdm(dcmFilesList)]
-
+    #print(dcmFilesList)
     sliceLocsArray=[]
     
     img = datasets[0].pixel_array
     Nx, Ny = img.shape
     NdNz = len(datasets)
     data = np.zeros((Nx,Ny,NdNz))
+    print(data.shape)
     for ds in datasets:
                 sliceLocsArray.append(float(ds.SliceLocation))
     sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
@@ -1896,7 +1884,7 @@ def read_seriers(filePath):
     seriesNumber = int(seriesNumber)
     return seriesNumber
 
-def read_trigger(filePath,eject=False,default=327):
+def read_trigger(filePath,reject=False,default=327,sigma=60):
     reader = sitk.ImageFileReader()
     reader.SetFileName( filePath )
     reader.LoadPrivateTagsOn()
@@ -1904,8 +1892,8 @@ def read_trigger(filePath,eject=False,default=327):
     triggerTime=float(reader.GetMetaData('0018|1060'))
     nominalTime=float(reader.GetMetaData('0018|1062'))
     readList=[float(default+i*nominalTime) for i in range(-5,5,1)]
-    if eject:
-        if min([abs(triggerTime - t)  for t in readList]) >50:
+    if reject:
+        if min([abs(triggerTime - t)  for t in readList]) >sigma:
             return False
         else:
             return triggerTime

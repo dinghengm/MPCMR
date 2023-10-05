@@ -1,6 +1,6 @@
 (Transform "AffineTransform")
 (NumberOfParameters 6)
-(TransformParameters 1.047104 -0.019742 0.000035 1.004463 0.380954 -0.172438)
+(TransformParameters 1.005196 0.005150 -0.002075 0.999979 0.034214 -0.007766)
 (InitialTransformParametersFileName "NoInitialTransform")
 (UseBinaryFormatForTransformationParameters "false")
 (HowToCombineTransforms "Compose")
