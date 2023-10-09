@@ -55,6 +55,9 @@ import pandas as pd
 from skimage.transform import resize as imresize
 import re
 import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from scipy.stats import chisquare
+import nibabel as nib
 try:
     from numba import njit #super fast C-like calculation
     _global_bNumba_support = True
@@ -201,16 +204,22 @@ class mapping:
                 valueList=[i+TE for i in valueList[::Nz]]
                 self.valueList=valueList
                 print('value:',valueList)
+                self.crange=[0,3000]
+                self.cmap='magma'
             elif 'mp02' in self.ID.lower():
                 #valueList=[30,35,40,50,60,70,80,100]
                 valueList=sorted(valueList)
                 valueList=[i for i in valueList[::Nz]]
                 print('value:',valueList)
                 self.valueList=valueList
+                self.crange=[0,150]
+                self.cmap='viridis'
             elif 'mp03' in self.ID.lower():
                 valueList=['b50x','b50y','b50z','b500x','b500y','b500z']
                 print('value:',valueList)
                 self.valueList=valueList
+                self.crange=[0,3]
+                self.cmap='hot'
         except:
             print('The data is the clinical data')
         
@@ -945,31 +954,41 @@ class mapping:
                                             'eraseshape'
                                         ]})
 
-    def imshow_corrected(self,volume=None,valueList=None, vmin=None, vmax=None,cmap='gray'):
+    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray'):
         Nx,Ny,Nz,Nd=np.shape(self._data)
         if volume is None:
             volume = self._data
         if valueList==None:
             valueList=self.valueList
-        if vmin is None:
-            vmin = np.min(volume[:])
-        if vmax is None:
-            vmax = np.max(volume[:])
+        if ID==None:
+            ID=self.ID
         plt.style.use('dark_background')
         fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))
         for d in range(Nd):
+            if vmin is None:
+                vmin = np.min(volume[:,:,0,:])
+            if vmax is None:
+                vmax = np.max(volume[:,:,0,:])
             axs[0,d].imshow(volume[:,:,0,d],cmap=cmap,vmin=vmin,vmax=vmax)
-            axs[0,d].set_title(f'{valueList[d]}ms',fontsize=5)
+            axs[0,d].set_title(f'{valueList[d]}',fontsize=5)
             axs[0,d].axis('off')
+            if vmin is None:
+                vmin = np.min(volume[:,:,1,:])
+            if vmax is None:
+                vmax = np.max(volume[:,:,1,:])
             axs[1,d].imshow(volume[:,:,1,d],cmap=cmap,vmin=vmin,vmax=vmax)
-            axs[1,d].set_title(f'{valueList[d]}ms',fontsize=5)
+            axs[1,d].set_title(f'{valueList[d]}',fontsize=5)
             axs[1,d].axis('off')
+            if vmin is None:
+                vmin = np.min(volume[:,:,2,:])
+            if vmax is None:
+                vmax = np.max(volume[:,:,2,:])
             axs[2,d].imshow(volume[:,:,2,d],cmap=cmap,vmin=vmin,vmax=vmax)
-            axs[2,d].set_title(f'{valueList[d]}ms',fontsize=5)
+            axs[2,d].set_title(f'{valueList[d]}',fontsize=5)
             axs[2,d].axis('off')
         plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{self.ID}_Original')
+        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_Original')
         plt.savefig(img_dir)
     def imshow_map(self,volume=None,crange=None,cmap='gray'):
         try:
@@ -1195,7 +1214,62 @@ class mapping:
         for z in tqdm(range(self.Nz)):
             new_data[:,:,z,:] = imresize(data[:,:,z,:],(newshape[0],newshape[1]))
         return new_data
+    
+    def _update(self):
+        #For single slice
+        if self.Nz == 1:
+            Nx, Ny, Nd = np.shape(self._data)
+            self.shape=np.shape(self._data)
+            self.Nx=Nx
+            self.Ny=Ny
+            self.Nd=Nd
+        # For t1 t2 clinical maps
+        elif len(np.shape(self._data))==3:
+            Nx, Ny, Nz = np.shape(self._data)
+            self.shape=np.shape(self._data)
+            self.Nx=Nx
+            self.Ny=Ny
+            self.Nz=Nz
+            self.Nd=0
+        #Then the data is 4D
+        else:
+            Nx, Ny, Nz, Nd = np.shape(self._data)
+            self.shape=np.shape(self._data)
+            self.Nx=Nx
+            self.Ny=Ny
+            self.Nz=Nz
+            self.Nd=Nd
+    def _update_mask(self,segmented):
+        self.CoM=segmented.CoM
+        self.mask_lv=segmented.mask_lv
+        self.mask_endo=segmented.mask_endo
+        self.mask_epi=segmented.mask_epi
+        try:
+            self.mask_septal=segmented.mask_septal
+            self.mask_lateral=segmented.mask_lateral
+        except:
+            print('Not implement septal and lateral')
 
+
+
+    def _delete(self,d=[],axis=-1):
+        #Only for T1 LIST ONLY
+        data_temp=np.delete(self._data,d,axis=axis)
+        list=np.delete(self.valueList,d).tolist()
+        self.valueList=list
+        self._data=data_temp
+        self._update()
+    
+    def _save_nib(self,data=None,path=None,ID=None):
+        if path ==None:
+            path=self.path
+        if ID== None:
+            ID=self.ID
+        if data==None:
+            data=self._data
+        save_nii=os.path.dirname(path,f'{ID}_moco.nii.gz')
+        nib.save(nib.Nifti1Image(data,affine=np.eye(4)),save_nii)
+        print('Saved successfully!')
 
     # register images with simple elastix
     def _coregister_elastix(self, data=None, orig_data=None, target_index=0, regMethod="affine", #"rigid", 
@@ -1662,8 +1736,128 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
         
                     
     return HAT_perslice    
-        
 
+#TODO      
+#Make a weighted least square fit
+#Equation: abs(ra+rb *exp(-TI/T1))
+def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,plot=False):
+
+    def ir_recovery(tVec,T1,ra,rb):
+        #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
+        tVec=np.array(tVec)
+        #Return T1Vec,ra,rb
+        return ra + rb* np.exp(-tVec/T1)
+    def chisquareTest(obs,exp):
+        return np.sum(((obs-exp)**2/exp))
+    #Make sure the data come in increasing TI-order
+    index = np.argsort(TIlist)
+    ydata=np.squeeze(data[index])
+    #Initialize variables:
+    aEstTmps=[]
+    bEstTmps=[]
+    T1EstTmps=[]
+    resTmps=[]
+    minInd=np.argmin(ydata)
+    if minInd==0:
+        minInd=1
+    elif minInd==len(TIlist):
+        minInd=len(TIlist)-1
+    #Invert the data to before,at,after the min
+    for ii in range(3):
+        if ii==0:
+            #before at the min
+            minIndTmp=minInd-1
+            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+            dataTmp=ydata*invertMatrix.T
+        if ii==1:
+            #at the min
+            minIndTmp=minInd
+            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+            dataTmp=ydata*invertMatrix.T
+        if ii==2:
+            #after the min
+            minIndTmp=minInd+1
+            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+            dataTmp=ydata*invertMatrix.T
+        try:
+            params,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000)
+            T1_exp,ra_exp,rb_exp=params
+            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+            aEstTmps.append(ra_exp)
+            bEstTmps.append(rb_exp)
+            T1EstTmps.append(T1_exp)
+            #Get the chisquare
+            resTmps.append(chisquareTest(dataTmp,ydata_exp))
+        except:
+            ydata_exp=ir_recovery(TIlist,T1,ra,rb)
+            aEstTmps.append(ra)
+            bEstTmps.append(rb)
+            T1EstTmps.append(T1)
+            #Get the chisquare
+            resTmps.append(chisquareTest(dataTmp,ydata_exp))
+        #Get the params with least chisquare
+    #Finally, return the best fit
+
+    returnInd = np.argmin(np.array(resTmps))
+    T1_final=T1EstTmps[returnInd]
+    ra_final=aEstTmps[returnInd]
+    rb_final=bEstTmps[returnInd]
+    #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
+    if plot:
+        plt.scatter(TIlist,ydata)
+        x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
+        ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
+        plt.plot(x_plot,ydata_exp)
+        plt.title(rf'The fitting Curve\\n,T1={T1_final}')
+        plt.xlabel('Inversion Time (ms)')
+        plt.ylabel('Signal')
+    return T1_final,ra_final,rb_final,resTmps[returnInd]
+def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
+    #Parallel is not able to use not
+    from multiprocessing import Pool
+    from functools import partial
+    #Go through for all slice:
+    if len(np.shape(data))==3:
+        Nx,Ny,Nd=np.shape(data)
+        Nz=1
+        NxNy=int(Nx*Ny)
+        finalMap=np.zeros((Nx,Ny))
+        finalRa=np.zeros((Nx,Ny))
+        finalRb=np.zeros((Nx,Ny))
+        finalRes=np.zeros((Nx,Ny))
+    elif len(np.shape(data))==4:
+        Nx,Ny,Nz,Nd=np.shape(data)
+        finalMap=np.zeros((Nx,Ny,Nz))
+        finalRa=np.zeros((Nx,Ny,Nz))
+        finalRb=np.zeros((Nx,Ny,Nz))
+        finalRes=np.zeros((Nx,Ny,Nz))
+        NxNy=int(Nx*Ny)
+    #Calculate all slices
+    dataTmp=np.copy(data)
+    for z in range(Nz):
+        if parallel:
+            if Nz ==1:
+                dataTmp=np.reshape(dataTmp,(NxNy))
+                finalMap=np.reshape(finalMap,(NxNy))
+            else:
+                dataTmp=np.reshape(dataTmp,(NxNy,Nz,Nd))
+                tempMap=np.reshape(finalMap,(NxNy,Nz))
+                tempRa=np.reshape(finalRa,(NxNy,Nz))
+                tempRb=np.reshape(finalRb,(NxNy,Nz))
+                tempRes=np.reshape(finalRes,(NxNy,Nz))
+
+            with Pool(6) as pool:
+                temp=pool.map(partial(ir_fit,TIlist=TIlist,ra=ra,rb=-rb,T1=T1), [dataTmp[i,z,:] for i in range(NxNy)])
+
+            finalMap[:,:,z]=np.reshape(np.array(temp[0]),(Nx,Ny))
+            finalRa[:,:,z]=np.reshape(np.array(temp[1]),(Nx,Ny))
+            finalRb[:,:,z]=np.reshape(np.array(temp[2]),(Nx,Ny))
+            finalRes[:,:,z]=np.reshape(np.array(temp[3]),(Nx,Ny))
+        else:
+            for x in range(Nx):
+                for y in range(Ny):
+                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1)
+    return finalMap,finalRa,finalRb,finalRes
 
 #########################################################################################
 # DEPRECATED BUT USEFUL FUCNTIONS NOT PART OF DIFFUSION CLASS
@@ -1672,31 +1866,51 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
 # tensor decomposition LRT function which is generalized and flexible (may need to use ungated)
 def decompose_LRT(data, rank_img=10, rank_diff=1, rank_diff_resp=2):
     Nx, Ny, Nz, Nd = data.shape
+    data_regress = np.copy(data / np.max(data, axis=(0, 1), keepdims=True))
+    data_diff_regress=np.copy(data)
+    for z in tqdm(range(Nz)):
+        print(' ...... Slice '+str(z), end='')
+        if Nz == 1:
+            data = data_regress.reshape(Nx*Ny, Nd)
+        else:
+            data = data_regress[:,:,z,:].reshape(Nx*Ny, Nd)
+        tensor = tl.tensor(data)
+        U1 = tl.svd_interface(tensor, n_eigenvecs=rank_img)[0]
 
-    #create tensor in the 2D form
-    tensor = tl.tensor(data.reshape(Nx*Ny, Nz*Nd))
+        ## compute diffusion representation an projections
+        # U2_diff = nvecs(data.T, rankBval)
+        #U2_diff = tl.partial_svd(tensor, rank_diff)[2]
+        U2_diff = tl.svd_interface(tensor, n_eigenvecs=rank_diff)[2]
 
-    #truncate tensor in image and b-value space
-    _, _, U_diff = _truncTensorDim(tensor, (rank_img, rank_diff))
-    #truncate tensor in image and b-value + respiratory space
-    _, G_diff_resp, U_diff_resp = _truncTensorDim(tensor, (rank_img, rank_diff_resp))
-    
-    # regress out the effects of diffusion (first componenet in the truncation in time)
-    # to get the purely respiratory signal for as a pre-processing step of moco
-    U_resp = np.copy(U_diff_resp)
-    U_resp[1] = np.linalg.pinv(np.diag(U_diff[1].ravel())).dot(U_diff_resp[1])
-    tensor_resp = tl.tucker_tensor.tucker_to_tensor((G_diff_resp, U_resp))
-    return tensor_resp
+        ## Compute respiration + diffusion low dim representation
+        # U2_diff_resp = nvecs(data.T, rankBvalResp)
+        #U2_diff_resp = tl.partial_svd(tensor, rank_diff_resp)[2].T
+        U2_diff_resp = tl.svd_interface(tensor, n_eigenvecs=rank_diff_resp)[2].T
+
+        ## compute image and respiration cores
+        # G_diff_resp = np.linalg.pinv(U1).dot( data ).dot(np.linalg.pinv(U2_diff_resp.T))
+        G_diff_resp = tl.tenalg.multi_mode_dot( tensor, 
+                                    [np.linalg.pinv(U1), np.linalg.pinv(U2_diff_resp)], 
+                                    [0,1] )
+
+        ## regress diffusion out
+        U2_diff_regress = np.diag( U2_diff.ravel()**(-1) ).dot(  U2_diff_resp )
+        # data_diff_regress = U1.dot( G_diff_resp ).dot(U2_diff_regress.T).reshape(data.shape)
+        data_diff_regress_temp = tl.to_numpy(
+                                tl.tucker_to_tensor( (G_diff_resp, (U1, U2_diff_regress)) )
+                                        ).reshape((Nx,Ny,Nd))
+        data_diff_regress[:,:,z,:]=data_diff_regress_temp
+    return data_diff_regress
 
 # truncate tensor based on rank helper method for LRT moco
-def _truncTensorDim(tensor, truncRk=(1,1)):
+def truncTensorDim(tensor, truncRk=(1,1)):
     U = list(range(len(truncRk)))
     for dd in range(len(truncRk)):
         # get n-mode matrix
         nMode = tl.unfold(tensor, mode=dd)
 
         # compute truncated partial SVD
-        U[dd],s,v = tl.backend.partial_svd(nMode.dot(nMode.T), n_eigenvecs=truncRk[dd])
+        U[dd],s,v = tl.svd_interface(nMode.dot(nMode.T), n_eigenvecs=truncRk[dd])
 
     # estimate tensor core
     G = tl.tenalg.multi_mode_dot( tensor, [np.linalg.pinv(U[dd]) for dd in range(len(U))] )
@@ -1868,7 +2082,7 @@ def readFolder(dicomPath,sortBy='tval',reject=False,default=327):
 
 #Match the file and 
 def get_value(input_string):
-    pattern = r"(?i)(Ti|TE)[_]?(\d+)ms"
+    pattern = r"(?i)(Ti|TE)[_]?(\d+)[ms]?"
     match = re.search(pattern, input_string)
     if match:
         return int(match.group(2))
@@ -1884,7 +2098,7 @@ def read_seriers(filePath):
     seriesNumber = int(seriesNumber)
     return seriesNumber
 
-def read_trigger(filePath,reject=False,default=327,sigma=60):
+def read_trigger(filePath,reject=False,default=327,sigma=100):
     reader = sitk.ImageFileReader()
     reader.SetFileName( filePath )
     reader.LoadPrivateTagsOn()
