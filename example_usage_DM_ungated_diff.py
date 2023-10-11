@@ -45,7 +45,7 @@ from sklearn import preprocessing
 # %% Import libraries ###################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from libDiffusion import diffusion  # <--- this is all you need to do diffusion processing
+from libDiffusion_V2 import diffusion  # <--- this is all you need to do diffusion processing
 
 # define class object and read in data
 # select the dicom of the folder that holds all dicoms of diffusion data

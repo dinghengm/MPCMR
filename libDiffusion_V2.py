@@ -1,27 +1,20 @@
 #########################################################################################
 #########################################################################################
 # CIRC's Diffusion Libraries
-# MultiParametric Echo Planer Imaging (MP-EPI)
+#
 # Christopher Nguyen, PhD
 # Cleveland Clinic
 # 6/2022
-# Dingheng Mai
-# Case Western Reserve University, Biomedical Engineering
-# Sep/2023
-# 
 #########################################################################################
 #########################################################################################
 #
 # INSTALLATION PACKAGES PREREQ
 # install anaconda first
 #
-# Before running this script:
-#    * install anaconda
-#    * from terminal, run conda activate base (or environment of choice)
-#    * pip install -U tensorly
-#    * pip install roipoly SimpleITK-SimpleElastix imgbasics ipyfilechooser pydicom plotly imageio PyQt6 nibabel
-#    * conda install scikit-image
-#    * conda install tqdm <--should already be there
+# pip install roipoly
+# pip install SimpleITK-SimpleElastix
+# pip install imgbasics
+# conda install tqdm <--should already be there
 # pip install ipyfilechooser
 # pip install opencv-python
 # python -m pip install statsmodels
@@ -53,11 +46,8 @@ import pickle # to save diffusion object
 import fnmatch # this is for string comparison dicomread
 import pandas as pd
 from skimage.transform import resize as imresize
-import re
 import statsmodels.api as sm
-from scipy.optimize import curve_fit
-from scipy.stats import chisquare
-import nibabel as nib
+
 try:
     from numba import njit #super fast C-like calculation
     _global_bNumba_support = True
@@ -69,12 +59,15 @@ except:
 ##########################################################################################################
 # Class Library
 ##########################################################################################################
-class mapping:
+
+class diffusion:
     # method used to initalize object
     # data can be path to data or it can be numpy data
-    def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
-                ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',reject=True): 
+    def __init__(self, data=None, bval=None, bvec=None, 
+                 bFilenameSorted=True, 
+                 bMaynard=False,
+                 ID=None,
+                 UIPath=None,datasets=[]): 
         
         '''
         Define class object and read in data
@@ -83,62 +76,42 @@ class mapping:
          * data: select the dicom of the folder that holds all dicoms of diffusion data OR select a previous *.diffusion 
          * ID: if you don't set ID number it will be taken from DICOM
          * bMaynard: default (bMaynard=False) to process on own laptop, pass bMaynard=True to process on Maynard
-        #1.1 update: change the slice location
+        
         '''
-        self.version = 1.2
-        self.ID = ID
-        self.CIRC_ID=CIRC_ID
-        if data is None:
-            fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.mapping','*.diffusion'],bval=None,bvec=None,
-                                 path = UIPath)
-          #Development Mode
-        if type(data) == str: #given a path so try to load in the data
-            tmp=data
-            if data.split('.')[-1] == 'mapping':
-                print('Loading in CIRC mapping object')
-                self._load(filename=data)
-            elif data.split('.')[-1] in {'dcm' , 'DCM'}:
-                print('Your data is in dcm form')
-                self.path = os.path.dirname(os.path.abspath(data))
-                data, bval, bvec, datasets = self.dicomread(self.path)  #Matthew fix one bug that now probabily load file if input is string
-                self.__initialize_parameters(data=data,bval=bval,bvec=bvec,datasets=datasets)
-            #Matthew add in read file from gz and npy 
-            elif data.split('.')[-1] == 'gz':
-                print('Your data is in nii.gz form')
-                import nibabel as nib
-                nii_img  = nib.load(data)
-                nii_data = nii_img.get_fdata()
-                self.__initialize_parameters(data=nii_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
-                print('Data loaded successfully')
-                self.path = os.path.dirname(os.path.abspath(data))
-            elif data.split('.')[-1] == 'npy':
-                print('our data is in .npy form')
-                npy_data=np.load(data,allow_pickle=True)
-                self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
-                print('Data loaded successfully')
-                self.path = os.path.dirname(os.path.abspath(data))
-            else:
-            ##It will be the path to the folders
-                pattern = r'CIRC_\d+'
 
-                # Use re.findall() to find all matches of the pattern in the string
-                matches = re.findall(pattern, tmp)
-                CIRC_ID=matches[0]
-                ID = tmp.split('\\')[-1]
-                if self.ID==None:
-                    self.ID=ID
-                if self.CIRC_ID == None:
-                    self.CIRC_ID=CIRC_ID
-                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject)
-                self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
+        self.version = 1.0
+        self.ID = ID
+
+        if bMaynard:
+            UIPath = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC/'
+            self.bMaynard = True
+        else:
+            self.bMaynard = False
+
+        if data is None:
+            fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.diffusion'],
+                                 path = UIPath, 
+                                 bFilenameSorted=bFilenameSorted)
+            #bval = self._bval <--- these two lines are done in uigetfile
+            #bvec = self._bvec
+
+        if type(data) == str: #given a path so try to load in the data
+            tmp = data
+            
+            if tmp.split('.')[-1] == 'diffusion':
+                print('Loading in CIRC diffusion object')
+                self._load(filename=tmp)                    
+            
+            else:
+                data, bval, bvec, datasets = self.dicomread(data, bFilenameSorted=bFilenameSorted)
+                self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
                 self.path = tmp
         else:
-            self.__initialize_parameters(data=data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
+            self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
         # this is junk code needed to initialize to allow for the interactive code to work
         # TO DO: 
         # this can be avoided if I modify roipoly library with the 
         # updated plt.ion command instead of plt.show(block=True)
-        '''
         fig = plt.figure()
         plt.imshow([  [0,0,0,1,1,0,1,0,0,0,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,1,0,1,0,0],
                     [0,0,1,0,0,0,1,0,0,0,1,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0],
@@ -149,90 +122,76 @@ class mapping:
         plt.title('CLOSE ME')
         fig.canvas.manager.set_window_title('CLOSE ME')
         multiroi_named = MultiRoi(roi_names=['just close me', 'CLOSE ME NOW!!'])
-        '''
+
 
     # initialize class parameters (needed to be a separate fcn for UI file browser callback)
-    def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[],valueList=[]):
-        if len(data.shape) == 4:
-            [Nx, Ny, Nz, Nd] = data.shape
-            self._map = np.zeros((Nx,Ny,Nz))
-        elif len(data.shape) == 3:
-            [Nx, Ny, Nd] = data.shape
-            Nz = 1
-            self._map = np.zeros((Nx,Ny))
-        else:
-            raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
-        self.Nx = Nx
-        self.Ny = Ny
-        self.Nz = Nz
-        self.Nd = Nd
-        self.shape = data.shape
-        self._raw_data = np.copy(data) #original raw data is untouched just in case we need
-        self._data = np.copy(data) #this is the data we will be calculating everything off
-        self.dcm_list = datasets
-        if self.CIRC_ID == None:
-            self.CIRC_ID = self.dcm_list[0].PatientID
+    def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[]):
         try:
-            reader = sitk.ImageFileReader()
-            reader.SetFileName( self.dcm_list[0] )
-            reader.LoadPrivateTagsOn()
-            reader.ReadImageInformation()
-            TEtime=float(reader.GetMetaData('0018|0081'))
-            TE = TEtime
-        except:
-            #Hard Code TE
-            TE=40
-        try:
-            self.bval = np.concatenate((np.zeros(1),
-                                    np.ones(Nd)*500)) #default b = 500
-            self.bvec = np.concatenate((np.zeros([1,3]),
-                                    self._getGradTable(Nd))) #default b = 500
-        except:
-            self.bval = bval
-            self.bvec = bvec
-        try:
-            #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
-            temp = np.copy(self.bvec[:,0])
-            self.bvec[:,0] = self.bvec[:,1]
-            self.bvec[:,1] = temp
-                #Initiate the label:
-        except:
-            print('bvec is empty')
-        try:
-            if 'mp01' in self.ID.lower():
-                valueList=sorted(valueList)
-                valueList=[i+TE for i in valueList[::Nz]]
-                self.valueList=valueList
-                print('value:',valueList)
-                self.crange=[0,3000]
-                self.cmap='magma'
-            elif 'mp02' in self.ID.lower():
-                #valueList=[30,35,40,50,60,70,80,100]
-                valueList=sorted(valueList)
-                valueList=[i for i in valueList[::Nz]]
-                print('value:',valueList)
-                self.valueList=valueList
-                self.crange=[0,150]
-                self.cmap='viridis'
-            elif 'mp03' in self.ID.lower():
-                valueList=['b50x','b50y','b50z','b500x','b500y','b500z']
-                print('value:',valueList)
-                self.valueList=valueList
-                self.crange=[0,3]
-                self.cmap='hot'
-        except:
-            print('The data is the clinical data')
-        
+            if len(data.shape) == 4:
+                [Nx, Ny, Nz, Nd] = data.shape
+                self.md = np.zeros((Nx,Ny,Nz))
+                self.fa = np.zeros((Nx,Ny,Nz))
+                self.pvec = np.zeros((Nx,Ny,Nz,3))
+                self.ha = np.zeros((Nx,Ny,Nz))
+            elif len(data.shape) == 3:
+                [Nx, Ny, Nd] = data.shape
+                Nz = 1
+                self.md = np.zeros((Nx,Ny))
+                self.fa = np.zeros((Nx,Ny))
+                self.pvec = np.zeros((Nx,Ny,3))
+                self.ha = np.zeros((Nx,Ny))
+            else:
+                raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
+            self.Nx = Nx
+            self.Ny = Ny
+            self.Nz = Nz
+            self.Nd = Nd
+            self.shape = data.shape
+            self._raw_data = np.copy(data) #original raw data is untouched just in case we need
+            self._data = np.copy(data) #this is the data we will be calculating everything off
+            self.dcm_list = datasets
+            if self.ID == None:
+                self.ID = self.dcm_list[0].PatientID
+            '''
+            if bval == []:
+                self.bval = np.concatenate((np.zeros(1),
+                                        np.ones(Nd)*500)) #default b = 500
+            else:
+                self.bval = bval
 
-        
-        self.mask_endo = []
-        self.mask_epi = []
-        self.mask_lv = []
-        self.mask_septal = []
-        self.mask_lateral = []
-        self.CoM = []
-        self.cropzone = []
-        print('Data loaded successfully')
+            if bvec == []:
+                self.bvec = np.concatenate((np.zeros([1,3]),
+                                        self._getGradTable(12))) #default b = 500
+            
+            else:
+                self.bvec = bvec
+                # swap x and y if phase encode is LR
+                #try: 
+                #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
+                temp = np.copy(self.bvec[:,0])
+                self.bvec[:,0] = self.bvec[:,1]
+                self.bvec[:,1] = temp
+                #except:
+                #    if self.Nx > self.Ny:
+                #        temp = np.copy(self.bvec[:,0])
+                #        self.bvec[:,0] = self.bvec[:,1]
+                #        self.bvec[:,1] = temp
+            '''
+
+            
+            self.mask_endo = []
+            self.mask_epi = []
+            self.mask_lv = []
+            self.mask_septal = []
+            self.mask_lateral = []
+            self.CoM = []
+            self.cropzone = []
+            self.path = path
+
+            print('Data loaded successfully')
+        except:
+            print('something went wrong with loading!!! Try setting bFilenameSorted=False')
+
 
     # string returned if printed    
     def __str__(self):
@@ -248,25 +207,18 @@ class mapping:
 # ========================================================================================================
 # "PUBLIC" CLASS FUNCTIONS ===============================================================================
 # ========================================================================================================
-    
+        
     # crop class method
-    def go_crop(self):
+    def go_crop(self, crop_data=None):
         '''
         Click top left and bottom right corners on pop-up window to crop
         '''
         print('Cropping of data:')
-        self._data, self.cropzone = self._crop()
+        self._data, self.cropzone = self._crop(data=crop_data)
         self.Nx = self._data.shape[0]
         self.Ny = self._data.shape[1]
         self.shape = self._data.shape
-        
-    def go_crop_Auto(self,data=None,cropStartVx=40):
-        cropData=self._crop_Auto(data=data,cropStartVx=cropStartVx)
-        self._data=cropData
-        self.Nx = self._data.shape[0]
-        self.Ny = self._data.shape[1]
-        self.shape = self._data.shape
-        return 
+
 
     # resize class method
     def go_resize(self, scale=2, newshape=None):
@@ -279,8 +231,8 @@ class mapping:
         print('Resizing of data:')
         if newshape == None:
             newshape = scale*np.array([self.Nx, self.Ny])
-        self.Nx = newshape[0]
-        self.Ny = newshape[1]
+        self.Nx = int(newshape[0])
+        self.Ny = int(newshape[1])
         self._data = self._resize()
 
     # motion correct class method
@@ -296,7 +248,12 @@ class mapping:
         print('Motion correction of data: ')
         if method == 'lrt':
             print(' ... Performing low rank tensor motion correction')
-            self._data_regress = np.copy(self._data / np.max(self._data, axis=(0, 1), keepdims=True))
+            
+            # copy and normalize data
+            max_val = np.max(self._data, axis=(0, 1), keepdims=True)
+            self._data = self._data / max_val
+            self._data_regress = np.copy(self._data)
+            
             #define ranks
             for z in tqdm(range(self.Nz)):
                 print(' ...... Slice '+str(z), end='')
@@ -345,7 +302,9 @@ class mapping:
                     self._data[:,:,z,:] = self._coregister_elastix(data=data_diff_regress, 
                                                                    orig_data=self._data[:,:,z,:])
                 #print(' ......... ' + str(toc(t)))
-            
+                
+            self._data = self._data * max_val
+                
         elif method == 'naive':
             print(' ... Performing naive motion correction')
             #define ranks
@@ -364,6 +323,8 @@ class mapping:
                     self._data[:,:,z,:] = self._coregister_elastix(data=data)
                 #print(' ......... ' + str(toc(t)))
 
+        
+        
 
     # denoising class method
     def go_denoise(self, method='tv', weight=0.1, wavelt_rescale_sigma=True, lrt_rk=None):
@@ -389,90 +350,7 @@ class mapping:
             self._data = tl.tucker_to_tensor((core, factors))
 
 
-    #Calculate ADC method
-    def go_cal_ADC(self):
-        #Assume the first 3 is b50, the later 3 is b500
-        print("Starting calculation of ADC")
-        ADC_temp=np.zeros((self.Nx,self.Ny,self.Nz,3))
-        S50=np.zeros((self.Nx,self.Ny))
-        S500=np.zeros((self.Nx,self.Ny))
-        for z in range(self.Nz):
-            for d in range(int(self.Nd/2)):
-                S50= self._data[...,z,d]
-                S500= self._data[...,z,d+3]
-                ADC_temp[:,:,z,d]=-1/450 * np.log(S500/S50)
-        #S50=np.cbrt(S50)
-        #S500=self._data[...,-1]*self._data[...,-2]*self._data[...,-3]
-        #S500=np.cbrt(S500)
-        ADCmap=np.zeros((self.Nx,self.Ny,self.Nz))
-        ADCmap=np.mean(ADC_temp,axis=-1)
-        self.ADC=ADCmap
-        return ADCmap
     # calculate diffusion tensor class method
-    def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False):
-        '''
-        Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
-        '''
-        print('Calculating diffusion tensor for data: ')
-
-        #first unwrap everything for faster calculation using Numba
-        G = self.bvec
-        bval = self.bval
-        self.b_matrix = -1 * np.array([
-                G[:,0]*G[:,0]*bval,  #    Bxx
-                G[:,1]*G[:,1]*bval, #     Byy
-                G[:,2]*G[:,2]*bval, #     Bzz
-                G[:,0]*G[:,1]*2*bval, #   Bxy
-                G[:,0]*G[:,2]*2*bval, #   Bxz
-                G[:,1]*G[:,2]*2*bval, #   Byz
-                np.ones(G[:,0].shape) # S0
-            ]).T
-        NxNyNz = self.Nx*self.Ny*self.Nz
-
-        if bNumba and _global_bNumba_support:
-            tensor, eval, evec = calctensor_numba(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        else:
-            tensor, eval, evec = calctensor(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        eval[eval<0] = 1e-10 # do this after numba fcn since it was supported
-        
-        # wrap everything back up
-        self.tensor = tensor.reshape([self.Nx,self.Ny,self.Nz,6])
-        self.eval = eval.reshape([self.Nx,self.Ny,self.Nz,3])
-        self.evec = evec.reshape([self.Nx,self.Ny,self.Nz,3,3]) # [Nx,Ny,Nz,xyz,p1p2p3]
-        #temp = np.copy(self.evec[:,:,:,1,:]) #blue and green are transposed
-        #self.evec[:,:,:,1,:] = self.evec[:,:,:,2,:] 
-        #self.evec[:,:,:,2,:] = temp
-
-        # calculate diffusion parametric maps
-        self.md = np.mean(self.eval,axis=3)
-        l1 = self.eval[...,0]
-        l2 = self.eval[...,1]
-        l3 = self.eval[...,2]
-
-        self.fa = np.sqrt(((l1-l2)**2 + (l2-l3)**2 + (l3-l1)**2) / ( l1**2 + l2**2 +l3**2 )
-                        ) / np.sqrt(2)
-        self.pvec = self.evec[...,0]
-        self.colFA = np.abs(self.pvec)*np.tile(self.fa[:,:,:,np.newaxis],(1,1,1,3))
-
-        if bCalcHA:
-            try:
-                self.ha = calcHA(self.pvec, self.CoM)
-            except:
-                self.go_define_CoM()
-                self.ha = calcHA(self.pvec, self.CoM)
-        else:
-            self.ha = np.copy(self.fa)*0
-        
-        self.hat = calcHAT(self.ha, self.mask_lv)
-        #except:
-        #    self.ha = np.zeros(fa.shape)
-        #    print('No LV mask!! Cannot run HA calculation: run *.go_segment_LV() class method first')
-        
-
     def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False, bclickCOM=False):
         '''
         Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
@@ -542,15 +420,15 @@ class mapping:
 
     # segment LV endo and epi borders
     def go_segment_LV(
-        self,
-        z=-1,
-        reject=None,
-        image_type="map", 
+        self, 
+        z=-1, 
+        reject=None, 
+        image_type="b0_avg", 
         cmap="gray", 
         dilate=True, 
         kernel=3, 
-        roi_names=['endo', 'epi'],
-        crange=None):
+        roi_names=['endo', 'epi']
+    ):
         '''
         Segment the LV
         
@@ -567,24 +445,38 @@ class mapping:
             * dilate: for "HA overlay", dilates current LV mask
             * kernel: dictates how much the LV mask is dilated (higher kernel = more dilation)
             * roi names: rois to generate, default ['endo', 'epi'], but may want ['endo', 'epi', 'septal', 'lateral']
-'''
+        '''
         # you will need to use this decorator to make this work --> %matplotlib qt
         print('Segment of the LV')
-        data=self._data
-        if crange==None:
-            crange=[np.min(data),np.max(data)]
-        if z == -1: #new ROI
-            self.mask_endo = np.full((data).shape[:3], False, dtype=bool) # [None]*self.Nz
-            self.mask_epi = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
-            self.mask_lv = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
-            self.mask_septal = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
-            self.mask_lateral = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
-            self.CoM = [None]*self.Nz
-            slices = range(self.Nz)
-        else: # modify a specific slice for ROI
-            slices = [z]
-        for z in slices:
 
+        if image_type == "HA overlay":
+            alpha = 1.0*self.mask_lv
+            if dilate:
+                import cv2
+                kernel = np.ones((kernel, kernel), np.uint8)
+                alpha = cv2.dilate(alpha, kernel, iterations=1)
+                alpha = 1.0*(alpha > 0)
+            
+        if z == -1: # new ROI
+            self.mask_endo = np.full((self._data).shape[:3], False, dtype=bool) # [None]*self.Nz
+            self.mask_epi = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_lv = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_septal = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_lateral = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.CoM = [None]*self.Nz
+            slices = np.arange(self.Nz)
+            
+            if reject != None:
+                slices = np.delete(slices, reject)
+        
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+        for z in slices:
+            
             if image_type == "b0":
                 image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
                 fig = plt.figure()
@@ -605,11 +497,12 @@ class mapping:
                 fig = plt.figure()
                 plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
                 
-          
-            elif image_type == "map":
-                image = self._map[:,:,z]
+            elif image_type == "HA overlay":
+                image = self.ha[:,:,z]
                 fig = plt.figure()
-                plt.imshow(image, cmap='gray',vmin=crange[0],vmax=crange[1])
+                plt.imshow(np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1), cmap="gray")
+                plt.imshow(image, cmap="jet", alpha=alpha[...,z])
+            
             # draw ROIs
             plt.title('Slice '+ str(z))
             fig.canvas.manager.set_window_title('Slice '+ str(z))
@@ -633,8 +526,142 @@ class mapping:
             ind = np.where(self.mask_endo[..., z]>0)
             self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
 
-            plt.close()
+    def go_resegment_LV(self, z=-1, reject=None, image_type="HA overlay", cmap="gray", dilate=True, kernel=3, roi_names=['endo', 'epi']):
+        '''
+        Adjust segmentations
         
+        Input:
+            * z: slices to segment, -1 (default) to resegment all
+            * image_type: 
+                    - "b0_avg": average of all b0 (really b=50) images
+                    - "b0": first b0 image
+                    - "MD": md map
+                    - "HA": ha map
+                    - "HA overlay": shows HA masked by current LV mask over b0_avg
+            * dilate: for "HA overlay", dilates current LV mask
+            * cmap: color map, "gray" (default) for grayscale, may want "jet" for HA
+            * roi_names: ROIs you want to redraw
+        
+        '''
+        # you will need to use this decorator to make this work --> %matplotlib qt
+
+        if image_type == "HA overlay":
+            alpha = 1.0*self.mask_lv
+            if dilate:
+                import cv2
+                kernel = np.ones((kernel, kernel), np.uint8)
+                alpha = cv2.dilate(alpha, kernel, iterations=1)
+                alpha = 1.0*(alpha > 0)
+            
+        if z == -1: # new ROI
+            slices = np.arange(self.Nz)
+            
+            if reject != None:
+                slices = np.delete(slices, reject)
+        
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+        for z in slices:
+            
+            if image_type == "b0":
+                image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+            
+            elif image_type == "b0_avg":
+                image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap)
+                
+            elif image_type == "MD":
+                image = self.md[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA overlay":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1), cmap="gray")
+                plt.imshow(image, cmap="jet", alpha=alpha[...,z])
+            
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            if np.any(np.array(roi_names) == "endo"):
+                self.mask_endo[..., z] = multirois.rois['endo'].get_mask(image)
+            if np.any(np.array(roi_names) == "epi"):
+                self.mask_epi[..., z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv[..., z] = self.mask_epi[..., z]^self.mask_endo[..., z]
+            if np.any(np.array(roi_names) == "septal"):
+                self.mask_septal[..., z] = multirois.rois['septal'].get_mask(image)
+            if np.any(np.array(roi_names) == "lateral"):
+                self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
+
+            
+    # segment LV endo and epi borders
+    def go_refine_HATLV(self, z=-1, dilate=False, kernel=3, roi_names=['endo', 'epi']):
+        '''
+        Create LV mask for HAT calculation
+        
+        Input:
+            * z: slices to refine, -1 (default) to refine all
+        
+        For each slice:
+            1. Click new ROI, draw endocardium, double click to finish
+            2. Click new ROI, draw epicardium, double click to finish
+            5. Click finish to go to next slice
+        '''
+        # you will need to use this decorator to make this work --> %matplotlib qt
+        print('Refinethe HAT LV mask')
+
+        if z == -1: # all slices
+            slices = np.arange(self.Nz)
+            self.mask_lv_HAT = np.copy(self.mask_lv)
+            self.mask_endo_HAT = np.copy(self.mask_endo)
+            self.mask_epi_HAT = np.copy(self.mask_epi)
+            
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+                
+        if dilate:
+            import cv2
+            kernel = np.ones((kernel, kernel), np.uint8)
+            lv_mask = cv2.dilate(1.0*self.mask_lv, kernel, iterations=1)
+            lv_mask = (lv_mask > 0)      
+        else:
+            lv_mask = self.mask_lv
+            
+        for z in slices:
+            # plot avg b0 image
+            image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
+            fig = plt.figure()
+            plt.imshow(image, cmap="gray", vmax=np.max(image)*0.6)
+            # plot HA overlay
+            plt.imshow(self.ha[...,z], cmap="jet", alpha=1.0*lv_mask[..., z])    
+            
+            
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            if np.any(np.array(roi_names) == 'endo'):
+                self.mask_endo_HAT[..., z] = multirois.rois['endo'].get_mask(image)
+            if np.any(np.array(roi_names) == 'epi'):
+                self.mask_epi_HAT[..., z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv_HAT[..., z] = self.mask_epi_HAT[..., z]^self.mask_endo_HAT[..., z]
+            
+                
     def go_define_CoM(self):
         '''
         Double click to define the COM for each slice
@@ -642,11 +669,11 @@ class mapping:
         print('Define CoM for quick HA estimate')
         self.CoM = [None]*self.Nz
         for z in range(self.Nz):
-            image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+            image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1) #self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
             fig = plt.figure()
-            plt.imshow(image, cmap='gray')
-            plt.title('Slice '+str(z) + ", Double Click Center")
-            fig.canvas.manager.set_window_title('Slice '+str(z))
+            plt.imshow(image, cmap='gray', vmax=np.max(image)*0.6)
+            plt.title('Slice '+ str(z) + ", Double Click Center")
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
             roi_CoM = RoiPoly(fig=fig, color='r')
             self.CoM[z] = np.array([np.mean(roi_CoM.y), np.mean(roi_CoM.x)])
             
@@ -669,10 +696,10 @@ class mapping:
                 path = self.path
             if ID == None:
                 ID = self.ID
-            if bMaynard:
+            if bMaynard or self.bMaynard:
                 path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
             if filename is None:
-                filename=os.path.join(os.path.dirname(path),f'{ID}_p.mapping')
+                filename=path+'/' + ID + '.diffusion'
 
             with open(filename, 'wb') as outp:  # Overwrites any existing file.
                 pickle.dump(self, outp, pickle.HIGHEST_PROTOCOL)
@@ -687,11 +714,15 @@ class mapping:
         '''
         Print gloabl LV MD and LV FA values
         '''
-        print(f'Global LV MD: {np.mean(self._map[self.mask_lv]): .2f} +/- {np.std(self._map[self.mask_lv]): .2f} um^2/ms')
+        
+        self.hat = calcHAT(self.ha, self.mask_lv)
+        
+        print(f'Global LV MD: {np.mean(self.md[self.mask_lv]*1000): .2f} +/- {np.std(self.md[self.mask_lv]*1000): .2f} um^2/ms')
+        print(f'Global LV FA: {np.mean(self.fa[self.mask_lv]): .2f} +/- {np.std(self.fa[self.mask_lv]): .2f}')
+        print(f'Global LV HAT: {self.hat: .2f}')
 
 
-
-    def export_stats(self, filename=None, path=None, ID=None,CIRC_ID=None, bMaynard=False,crange=None): 
+    def export_stats(self, filename=None, path=None, ID=None, bGlobalOnly=True, bPerSlice=False, bMaynard=False, id=None): 
         '''
         Export stats to .csv file. If filename already exists, the stats data is appended to the existing file
         
@@ -702,78 +733,89 @@ class mapping:
             * path: if filename=None, path defines where the csv file is saved
                         if None (default), the path is the directory the data was loaded from
             * ID: if filename=None, ID defines the name of the saved csv file
+            * bGlobalOnly: (boolean) only report global values - not septal/lateral (default=True)
+            * bPerSlice: (boolean) report values per slice (default=False)
             * bMaynard: (boolean) saves to Maynard if True, default is False
         '''
-        try:
-            if path == None:
-                path = self.path
-            if ID == None:
-                ID = self.ID
-            if CIRC_ID == None:
-                CIRC_ID = self.CIRC_ID
-            if bMaynard:
-                path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/CIRC'
-            if filename is None:
-                filename=os.path.join(path, ID) + '.csv'
-            if crange == None:
-                crange=self.crange
-            map=self._map
-            map=map[(map>=crange[0]) & (map<=crange[1])]
-            keys=['CIRC_ID','ID']
-            stats=[CIRC_ID,ID]
-            for z in range(self.Nz):
-                slice_stats = [
-                    np.mean(self._map[:,:,z][self.mask_lv[:,:,z]]),
-                    np.mean(self._map[:,:,z][self.mask_septal[:,:,z]]),
-                    np.mean(self._map[:,:,z][self.mask_lateral[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_lv[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_septal[:,:,z]]),
-                    np.std(self._map[:,:,z][self.mask_lateral[:,:,z]])] 
-
-
-                slice_keys=[str(f'Slice {z} global'),
-                str(f'Slice {z} septal'),
-                str(f'Slice {z} lateral'),
-                str(f'Slice {z} global std'),
-                str(f'Slice {z} septal std'),
-                str(f'Slice {z} lateral std')]
-
-
-
-                stats.extend(slice_stats)
-                keys.extend(slice_keys)
-            slice_stats = [
-                    np.mean(self._map[self.mask_lv]),
-                    np.mean(self._map[self.mask_septal]),
-                    np.mean(self._map[self.mask_lateral]),
-                    np.std(self._map[self.mask_lv]),
-                    np.std(self._map[self.mask_septal]),
-                    np.std(self._map[self.mask_lateral])] 
-
-
-            slice_keys=[str(f'global'),
-                str(f'septal'),
-                str(f'lateral'),
-                str(f'global std'),
-                str(f'septal std'),
-                str(f'lateral std')]
+        # try:
+        if path == None:
+            path = self.path
+        if ID == None:
+            ID = self.ID
+        if bMaynard or self.bMaynard:
+            path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
+        if filename is None:
+            filename=path+'/' + ID + '.xlsx'
             
-            stats.extend(slice_stats)
-            keys.extend(slice_keys)
+        self.hat = calcHAT(self.ha, self.mask_lv)
 
-
-            data=dict(zip(keys,stats))
-            self.dti_stats = pd.DataFrame(data, index=[0])
-                
-            if os.path.isfile(filename):    
-                self.dti_stats.to_csv(filename, index=False, header=False, mode='a')
-            else:
-                self.dti_stats.to_csv(filename, index=False)
-            
-            print('Saved '+ filename +' successfully!')
         
-        except:
-            print('Failed export!!!')
+        # export stats
+        
+        if bGlobalOnly:
+            if bPerSlice:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global MD (per slice)": [np.sum(self.md*self.mask_lv*1000, axis=(0,1)) / np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global FA (per slice)": [np.sum(self.fa*self.mask_lv, axis=(0,1)) /np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global HAT": self.hat,
+                    "Global HAT (per slice)": [calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100)]
+                })    
+            
+            else:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global HAT": self.hat,
+                })
+        
+        else:
+            if bPerSlice:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global MD (per slice)": [np.sum(self.md*self.mask_lv*1000, axis=(0,1)) / np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Septal MD": np.mean(self.md[self.mask_septal]*1000),
+                    "Septal MD (per slice)": [np.sum(self.md*self.mask_septal*1000, axis=(0,1)) / np.max([np.sum(self.mask_septal, axis=(0,1)), np.ones(self.Nz)])],
+                    "Lateral MD": np.mean(self.md[self.mask_lateral]*1000),
+                    "Lateral MD (per slice)": [np.sum(self.md*self.mask_lateral*1000, axis=(0,1)) / np.max([np.sum(self.mask_lateral, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global FA (per slice)": [np.sum(self.fa*self.mask_lv, axis=(0,1)) /np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Septal FA": np.mean(self.fa[self.mask_septal]),
+                    "Septal FA (per slice)": [np.sum(self.fa*self.mask_septal, axis=(0,1)) / np.max([np.sum(self.mask_septal, axis=(0,1)), np.ones(self.Nz)])],
+                    "Lateral FA": np.mean(self.fa[self.mask_lateral]),
+                    "Lateral FA (per slice)": [np.sum(self.fa*self.mask_lateral, axis=(0,1)) / np.max([np.sum(self.mask_lateral, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global HAT": self.hat,
+                    "Global HAT (per slice)": [calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100)]
+                })
+            
+            else:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Septal MD": np.mean(self.md[self.mask_septal]*1000),
+                    "Lateral MD": np.mean(self.md[self.mask_lateral]*1000),
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Septal FA": np.mean(self.fa[self.mask_septal]),
+                    "Lateral FA": np.mean(self.fa[self.mask_lateral]),
+                    "Global HAT": self.hat,
+                })
+                
+        if os.path.isfile(filename):  
+            startrow = len(pd.read_excel(filename)) + 1
+            with pd.ExcelWriter(filename, mode="a", engine="openpyxl", if_sheet_exists='overlay') as writer:  
+                self.dti_stats.to_excel(writer,  index=False, header=False, startrow=startrow)
+
+        else:
+            self.dti_stats.to_excel(filename, index=False)
+        
+        print('Saved '+ filename +' successfully!')
+        
+        # except:
+            # print('Failed export!!!')
 
 
     # read in dicoms
@@ -802,7 +844,7 @@ class mapping:
         for ds in datasets:
             data[:,:,i] = ds.pixel_array
             i += 1
-            sliceLocsArray.append(abs(float(ds.SliceLocation)))
+            sliceLocsArray.append(float(ds.SliceLocation))
             diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
             diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
             diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
@@ -897,13 +939,14 @@ class mapping:
 
         if not (path.split('.')[-1] == 'gif'):
             path = path + '.gif' 
-        imageio.mimsave(path, np.transpose(data,[2,0,1]), duration = 1./fps,loop=30)
-    #Visualize MP:
+        imageio.mimsave(path, np.transpose(data,[2,0,1]), duration = 1./fps)
+
+
     # visualize using plotly
     def imshow(self, volume=None, zmin=None, zmax=None, 
                     fps=30, cmap='gray', frameHW=None):
         if volume is None:
-            volume = self._data
+            volume = self._data / np.max(self._data, axis=(0,1), keepdims=True)
         if zmin is None:
             zmin = np.min(volume[:])
         if zmax is None:
@@ -951,103 +994,106 @@ class mapping:
                                             'drawrect',
                                             'eraseshape'
                                         ]})
-
-    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=True):
-        if volume is None:
-            volume = self._data
-        if valueList==None:
-            valueList=self.valueList
-        if ID==None:
-            ID=self.ID
-        Nx,Ny,Nz,Nd=np.shape(volume)
-        plt.style.use('dark_background')
-        fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))
-        for d in range(Nd):
-            for z in range(Nz):
-                if vmin is None:
-                    vmin = np.min(volume[:,:,z,:])
-                if vmax is None:
-                    vmax = np.max(volume[:,:,z,:])
-                axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
-                axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
-                axs[z,d].axis('off')
-        plt.show()
-        #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_Original')
-        if plot:
-            plt.savefig(img_dir)
-    def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
-        try:
-            Nx,Ny,Nz=np.shape(self._map)
-        except:
-            raise Exception('Map doesn\'t exist')
-            pass
-        if volume is None:
-            volume = self._map
-        #Generate the map color
-        if ID==None:
-            ID=self.ID
-        if crange==None:
-            if 't2' in self.ID.lower() or 'mp02' in self.ID.lower():
-                self.crange=[0,150]
-                self.cmap='viridis'
-
-            elif 't1' in self.ID.lower() or 'mp01' in self.ID.lower():
-                self.crange=[0,3000]
-                self.cmap='magma'
-            elif 'dwi' in self.ID.lower() or 'mp03' in self.ID.lower():
-                self.crange=[0,3]
-                self.cmap='hot'
-            crange=self.crange
-            cmap=self.cmap
-
-        num_slice=self.Nz
-        figsize = (3.4*num_slice, 3)
-
-        fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
-        for sl in range(num_slice):
-            axes[sl].set_axis_off()
-            im = axes[sl].imshow(np.flip(volume[..., sl],axis=0), vmin=crange[0],vmax=crange[1], cmap=cmap)
-        cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}')
-        if plot:
-            plt.savefig(img_dir)
-        plt.show()
+  
     
-    # visualize the overlay
-    def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
-        try:
-            Nx,Ny,Nz=np.shape(self._map)
-            sl=0
-            alpha = self.mask_lv[..., sl] * 1.0
-        except:
-            raise Exception('Map doesn\'t exist')
-            pass
-        if volume is None:
-            volume = self._map
-        #Generate the map color
-        if crange==None:
-            crange=self.crange
-            cmap=self.cmap
-        if ID==None:
-            ID=self.ID
-        num_slice=self.Nz
-        figsize = (num_slice*3, 3)
-        fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
-        for sl in range(num_slice):
-            alpha = self.mask_lv[..., sl] * 1.0
-            base_im = self._data[:, :, sl, 0]
-            brightness = 0.8
-            axes[sl].set_axis_off()
-            axes[sl].imshow(base_im, cmap="gray", vmax=np.max(base_im)*brightness)
-            im = axes[sl].imshow(self._map[..., sl], alpha=alpha, vmin=crange[0],vmax=crange[1], cmap=cmap)
-        cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
-        
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_overlay')
-        if plot:
-            plt.savefig(img_dir)
-        plt.show()  
+    # visualize diffusion parameters
+    def imshow_diff_params(self):
+        col_shape = (self.Nx,self.Ny*self.Nz)
+        md = self.md #.reshape(col_shape,order='F')
+        fa = self.fa #.reshape(col_shape,order='F')
+        ha = self.ha #.reshape(col_shape,order='F')
 
+        #fa_stack = np.dstack((fa,)*3)
+        #colFA = self.pvec.reshape((self.Nx,self.Ny*self.Nz,3),order='f')/np.max(self.pvec[:])*255*fa_stack
+        colFA = self.colFA #.reshape((self.Nx,self.Ny*self.Nz,3),order='f')*255
+        # swap x and y if phase encode is LR for display
+        temp = np.copy(colFA[...,0])
+        colFA[...,0] = colFA[...,1]
+        colFA[...,1] = temp
+
+        fig1 = px.imshow(md, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
+                         facet_col_spacing=0.01, template='plotly_dark',
+                         color_continuous_scale='hot', zmin=0, zmax=0.003)
+        fig2 = px.imshow(fa, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
+                         facet_col_spacing=0.01,template='plotly_dark',
+                         color_continuous_scale='dense', zmin=0, zmax=0.5)
+        fig3 = px.imshow(ha, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
+                         facet_col_spacing=0.01,template='plotly_dark',
+                         color_continuous_scale='jet', zmin=-90, zmax=90)
+        fig4 = px.imshow(colFA, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
+                         facet_col_spacing=0.01, template='plotly_dark')
+
+        fig1.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
+        fig2.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
+        fig3.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
+        fig4.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
+        fig1.layout.height = 1000
+        fig2.layout.height = 1000
+        fig3.layout.height = 1000
+        fig4.layout.height = 1000
+
+        fig1.show()
+        fig2.show()
+        fig3.show()
+        fig4.show()
+
+
+    # visualize diffusion map overlay using matplotlib
+    def imshow_overlay(self, volume=None, map=None, mask=None, cmap='jet'):
+        if volume is None:
+            volume = self._data[:,:,:,0]
+        
+        if map is None:
+            map = self.md
+
+        if mask is None:
+            mask = np.zeros(volume.shape)
+            for z in self.Nz:
+                mask[:,:,z] = self.lv_mask[z]
+
+        fig = plt.figure()
+        plt.imshow(volume, cmap='gray')
+        plt.imshow(map*mask, cmap=cmap)
+
+
+    def check_segmentation(self, z=-1):
+        
+        if z==-1:   # look at all slices
+            slices = np.arange(self.Nz)
+        
+        else:
+            if type(z) == list:
+                slices = z
+            
+            if type(z) == int:
+                slices = [z]
+        
+        for sl in slices:
+            
+            alpha = 1.0*self.mask_lv[..., sl]
+
+            print(f"Slice {sl}")
+            # HA map and overlay
+            figsize = (4, 2)
+            fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize, constrained_layout=True)
+
+            # HA
+            vmin = -90
+            vmax = 90
+            axes[0].set_axis_off()
+            im = axes[0].imshow(self.ha[..., sl], vmin=vmin, vmax=vmax, cmap="jet")
+
+            # HA overlay
+            b50_inds = np.argwhere(self.bval == 50).ravel()
+            base_im = np.mean(self._data[:, :, sl, b50_inds], axis=-1)
+            # base_im = dti._data[:, :, sl, b50_inds[0]]
+            brt = 0.6
+            axes[1].set_axis_off()
+            axes[1].imshow(base_im, vmax=np.max(base_im)*brt, cmap="gray")
+            im = axes[1].imshow(self.ha[..., sl], alpha=alpha, vmin=vmin, vmax=vmax, cmap="jet", interpolation=None)
+
+            plt.show() 
+            
 # ========================================================================================================
 # "PRIVATE" CLASS FUNCTIONS ==============================================================================
 # ========================================================================================================
@@ -1085,7 +1131,7 @@ class mapping:
         # Print the selected path, filename, or both
         #print(fc.selected_path)
         #print(fc.selected_filename)
-        #print(fc.selected)     
+        #print(fc.selected)
         
         fc.default_path = path # 
         fc.default_filename = 'test.dat'
@@ -1136,36 +1182,21 @@ class mapping:
 
     # crop function
     def _crop(self, data=None, cropzone=None):
-        shape=[]
         if data is None:
             data = np.copy(self._data)
         
         if cropzone is None:
-            if self.cropzone == []:
-                if self.Nz == 1:
-                    Nx, Ny, Nd = data.shape
-                    img_crop, cropzone = imcrop(np.sum(data, axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nd)
-                elif len(np.shape(data))==3:
-                    Nx, Ny, Nz = data.shape
-                    img_crop, cropzone = imcrop(np.sum(data, axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nz)
-                else:
-                    Nx, Ny, Nz, Nd = data.shape
-                    img_crop, cropzone = imcrop(np.sum(np.sum(data, axis=2), axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nz, Nd)
+            if self.Nz == 1:
+                Nx, Ny, Nd = data.shape
+                img_crop, cropzone = imcrop(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nd)
             else:
-                try:
-                    cropzone = self.cropzone
-                    temp = imcrop(data[:,:,0,0], cropzone)
-                    shape = (temp.shape[0], temp.shape[1], data.shape[2], data.shape[3])
-                except:
-                    cropzone = self.cropzone
-                    temp = imcrop(data[:,:,0], cropzone)
-                    shape = (temp.shape[0], temp.shape[1], data.shape[2])
+                Nx, Ny, Nz, Nd = data.shape
+                img_crop, cropzone = imcrop(np.sum(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nz, Nd)
+
         # apply crop
         data_crop = np.zeros(shape) #use updated shape
         
@@ -1174,29 +1205,7 @@ class mapping:
                 data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
 
         return data_crop, cropzone    
-
-
-
-
-    #automatically crop the data
-    def _crop_Auto(self,data=None,cropStartVx=40):
-        if data is None:
-            data = np.copy(self._data)
-        Nx,Ny,Nz,Nd=np.shape(data)
-        if Nx > Ny:
-            cropWin = int(Nx/3)
-            if cropStartVx is None:
-                cropStartVx = cropWin
-            cropData = data[cropStartVx:(cropStartVx+cropWin),...]
-        else:
-            if cropStartVx is None:
-                cropStartVx = cropWin
-            cropWin = int(Ny/3)
-            cropData = data[:,cropStartVx:(cropStartVx+cropWin),...]
-        return cropData
-
-
-
+    
     def _resize(self,  data=None, newshape=None):
         if data is None:
             data = np.copy(self._data)
@@ -1207,82 +1216,7 @@ class mapping:
         for z in tqdm(range(self.Nz)):
             new_data[:,:,z,:] = imresize(data[:,:,z,:],(newshape[0],newshape[1]))
         return new_data
-    
-    def _update(self):
-        #For single slice
-        if self.Nz == 1:
-            Nx, Ny, Nd = np.shape(self._data)
-            self.shape=np.shape(self._data)
-            self.Nx=Nx
-            self.Ny=Ny
-            self.Nd=Nd
-        # For t1 t2 clinical maps
-        elif len(np.shape(self._data))==3:
-            Nx, Ny, Nz = np.shape(self._data)
-            self.shape=np.shape(self._data)
-            self.Nx=Nx
-            self.Ny=Ny
-            self.Nz=Nz
-            self.Nd=0
-        #Then the data is 4D
-        else:
-            Nx, Ny, Nz, Nd = np.shape(self._data)
-            self.shape=np.shape(self._data)
-            self.Nx=Nx
-            self.Ny=Ny
-            self.Nz=Nz
-            self.Nd=Nd
 
-    def _update_mask(self,segmented):
-        '''
-            This function will get the mask from another input
-            *input
-                Segemented: Please input .diffusion or .mapping
-        
-        '''
-        self.CoM=segmented.CoM
-        self.mask_lv=segmented.mask_lv
-        self.mask_endo=segmented.mask_endo
-        self.mask_epi=segmented.mask_epi
-        try:
-            self.mask_septal=segmented.mask_septal
-            self.mask_lateral=segmented.mask_lateral
-        except:
-            print('Not implement septal and lateral')
-
-
-
-    def _delete(self,d=[],axis=-1):
-        '''
-            This function only work on T1 mapping only
-            It can delete the repetition you don't want
-            *input
-                d=[], the repetition don't want
-                axis=-1, by default delete the repetiton
-        
-        '''
-        #Only for T1 LIST ONLY
-        data_temp=np.delete(self._data,d,axis=axis)
-        list=np.delete(self.valueList,d).tolist()
-        self.valueList=list
-        self._data=data_temp
-        self._update()
-    
-    def _save_nib(self,data=None,path=None,ID=None):
-        '''
-            This function save the data as .nii file
-        
-        
-        '''
-        if path ==None:
-            path=self.path
-        if ID== None:
-            ID=self.ID
-        if data==None:
-            data=self._data
-        save_nii=os.path.join(os.path.dirname(path),f'{ID}_moco.nii.gz')
-        nib.save(nib.Nifti1Image(data,affine=np.eye(4)),save_nii)
-        print('Saved successfully!')
 
     # register images with simple elastix
     def _coregister_elastix(self, data=None, orig_data=None, target_index=0, regMethod="affine", #"rigid", 
@@ -1610,6 +1544,7 @@ def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
                 ha_map[x,y,z] = HA
     return ha_map
 
+
 def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
     Nx, Ny, Nz = ha.shape
     thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
@@ -1749,128 +1684,9 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
         
                     
     return HAT_perslice    
+        
 
-#TODO      
-#Make a weighted least square fit
-#Equation: abs(ra+rb *exp(-TI/T1))
-def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,plot=False):
 
-    def ir_recovery(tVec,T1,ra,rb):
-        #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
-        tVec=np.array(tVec)
-        #Return T1Vec,ra,rb
-        return ra + rb* np.exp(-tVec/T1)
-    def chisquareTest(obs,exp):
-        return np.sum(((obs-exp)**2/exp))
-    #Make sure the data come in increasing TI-order
-    index = np.argsort(TIlist)
-    ydata=np.squeeze(data[index])
-    #Initialize variables:
-    aEstTmps=[]
-    bEstTmps=[]
-    T1EstTmps=[]
-    resTmps=[]
-    minInd=np.argmin(ydata)
-    if minInd==0:
-        minInd=1
-    elif minInd==len(TIlist):
-        minInd=len(TIlist)-1
-    #Invert the data to before,at,after the min
-    for ii in range(3):
-        if ii==0:
-            #before at the min
-            minIndTmp=minInd-1
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
-        if ii==1:
-            #at the min
-            minIndTmp=minInd
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
-        if ii==2:
-            #after the min
-            minIndTmp=minInd+1
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
-        try:
-            params,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000)
-            T1_exp,ra_exp,rb_exp=params
-            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-            aEstTmps.append(ra_exp)
-            bEstTmps.append(rb_exp)
-            T1EstTmps.append(T1_exp)
-            #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
-        except:
-            ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-            aEstTmps.append(ra)
-            bEstTmps.append(rb)
-            T1EstTmps.append(T1)
-            #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
-        #Get the params with least chisquare
-    #Finally, return the best fit
-
-    returnInd = np.argmin(np.array(resTmps))
-    T1_final=T1EstTmps[returnInd]
-    ra_final=aEstTmps[returnInd]
-    rb_final=bEstTmps[returnInd]
-    #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-    if plot:
-        plt.scatter(TIlist,ydata)
-        x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
-        ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
-        plt.plot(x_plot,ydata_exp)
-        plt.title(rf'The fitting Curve\\n,T1={T1_final}')
-        plt.xlabel('Inversion Time (ms)')
-        plt.ylabel('Signal')
-    return T1_final,ra_final,rb_final,resTmps[returnInd]
-def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
-    #Parallel is not able to use not
-    from multiprocessing import Pool
-    from functools import partial
-    #Go through for all slice:
-    if len(np.shape(data))==3:
-        Nx,Ny,Nd=np.shape(data)
-        Nz=1
-        NxNy=int(Nx*Ny)
-        finalMap=np.zeros((Nx,Ny))
-        finalRa=np.zeros((Nx,Ny))
-        finalRb=np.zeros((Nx,Ny))
-        finalRes=np.zeros((Nx,Ny))
-    elif len(np.shape(data))==4:
-        Nx,Ny,Nz,Nd=np.shape(data)
-        finalMap=np.zeros((Nx,Ny,Nz))
-        finalRa=np.zeros((Nx,Ny,Nz))
-        finalRb=np.zeros((Nx,Ny,Nz))
-        finalRes=np.zeros((Nx,Ny,Nz))
-        NxNy=int(Nx*Ny)
-    #Calculate all slices
-    dataTmp=np.copy(data)
-    for z in range(Nz):
-        if parallel:
-            if Nz ==1:
-                dataTmp=np.reshape(dataTmp,(NxNy))
-                finalMap=np.reshape(finalMap,(NxNy))
-            else:
-                dataTmp=np.reshape(dataTmp,(NxNy,Nz,Nd))
-                tempMap=np.reshape(finalMap,(NxNy,Nz))
-                tempRa=np.reshape(finalRa,(NxNy,Nz))
-                tempRb=np.reshape(finalRb,(NxNy,Nz))
-                tempRes=np.reshape(finalRes,(NxNy,Nz))
-
-            with Pool(6) as pool:
-                temp=pool.map(partial(ir_fit,TIlist=TIlist,ra=ra,rb=-rb,T1=T1), [dataTmp[i,z,:] for i in range(NxNy)])
-
-            finalMap[:,:,z]=np.reshape(np.array(temp[0]),(Nx,Ny))
-            finalRa[:,:,z]=np.reshape(np.array(temp[1]),(Nx,Ny))
-            finalRb[:,:,z]=np.reshape(np.array(temp[2]),(Nx,Ny))
-            finalRes[:,:,z]=np.reshape(np.array(temp[3]),(Nx,Ny))
-        else:
-            for x in range(Nx):
-                for y in range(Ny):
-                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1)
-    return finalMap,finalRa,finalRb,finalRes
 
 #########################################################################################
 # DEPRECATED BUT USEFUL FUCNTIONS NOT PART OF DIFFUSION CLASS
@@ -1879,51 +1695,31 @@ def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
 # tensor decomposition LRT function which is generalized and flexible (may need to use ungated)
 def decompose_LRT(data, rank_img=10, rank_diff=1, rank_diff_resp=2):
     Nx, Ny, Nz, Nd = data.shape
-    data_regress = np.copy(data / np.max(data, axis=(0, 1), keepdims=True))
-    data_diff_regress=np.copy(data)
-    for z in tqdm(range(Nz)):
-        print(' ...... Slice '+str(z), end='')
-        if Nz == 1:
-            data = data_regress.reshape(Nx*Ny, Nd)
-        else:
-            data = data_regress[:,:,z,:].reshape(Nx*Ny, Nd)
-        tensor = tl.tensor(data)
-        U1 = tl.svd_interface(tensor, n_eigenvecs=rank_img)[0]
 
-        ## compute diffusion representation an projections
-        # U2_diff = nvecs(data.T, rankBval)
-        #U2_diff = tl.partial_svd(tensor, rank_diff)[2]
-        U2_diff = tl.svd_interface(tensor, n_eigenvecs=rank_diff)[2]
+    #create tensor in the 2D form
+    tensor = tl.tensor(data.reshape(Nx*Ny, Nz*Nd))
 
-        ## Compute respiration + diffusion low dim representation
-        # U2_diff_resp = nvecs(data.T, rankBvalResp)
-        #U2_diff_resp = tl.partial_svd(tensor, rank_diff_resp)[2].T
-        U2_diff_resp = tl.svd_interface(tensor, n_eigenvecs=rank_diff_resp)[2].T
-
-        ## compute image and respiration cores
-        # G_diff_resp = np.linalg.pinv(U1).dot( data ).dot(np.linalg.pinv(U2_diff_resp.T))
-        G_diff_resp = tl.tenalg.multi_mode_dot( tensor, 
-                                    [np.linalg.pinv(U1), np.linalg.pinv(U2_diff_resp)], 
-                                    [0,1] )
-
-        ## regress diffusion out
-        U2_diff_regress = np.diag( U2_diff.ravel()**(-1) ).dot(  U2_diff_resp )
-        # data_diff_regress = U1.dot( G_diff_resp ).dot(U2_diff_regress.T).reshape(data.shape)
-        data_diff_regress_temp = tl.to_numpy(
-                                tl.tucker_to_tensor( (G_diff_resp, (U1, U2_diff_regress)) )
-                                        ).reshape((Nx,Ny,Nd))
-        data_diff_regress[:,:,z,:]=data_diff_regress_temp
-    return data_diff_regress
+    #truncate tensor in image and b-value space
+    _, _, U_diff = _truncTensorDim(tensor, (rank_img, rank_diff))
+    #truncate tensor in image and b-value + respiratory space
+    _, G_diff_resp, U_diff_resp = _truncTensorDim(tensor, (rank_img, rank_diff_resp))
+    
+    # regress out the effects of diffusion (first componenet in the truncation in time)
+    # to get the purely respiratory signal for as a pre-processing step of moco
+    U_resp = np.copy(U_diff_resp)
+    U_resp[1] = np.linalg.pinv(np.diag(U_diff[1].ravel())).dot(U_diff_resp[1])
+    tensor_resp = tl.tucker_tensor.tucker_to_tensor((G_diff_resp, U_resp))
+    return tensor_resp
 
 # truncate tensor based on rank helper method for LRT moco
-def truncTensorDim(tensor, truncRk=(1,1)):
+def _truncTensorDim(tensor, truncRk=(1,1)):
     U = list(range(len(truncRk)))
     for dd in range(len(truncRk)):
         # get n-mode matrix
         nMode = tl.unfold(tensor, mode=dd)
 
         # compute truncated partial SVD
-        U[dd],s,v = tl.svd_interface(nMode.dot(nMode.T), n_eigenvecs=truncRk[dd])
+        U[dd],s,v = tl.backend.partial_svd(nMode.dot(nMode.T), n_eigenvecs=truncRk[dd])
 
     # estimate tensor core
     G = tl.tenalg.multi_mode_dot( tensor, [np.linalg.pinv(U[dd]) for dd in range(len(U))] )
@@ -2016,115 +1812,4 @@ def imshow_old(volume):
     )
 
     fig.show()
-
-
-
-#Read the folder, and generate a volume with Nx,Ny,Nz,Nd
-#Return Volume, valueList
-#Matthew Modification Sep 8th: Use the 
-def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True):
-    triggerList=[]
-    seriesIDList = []
-    seriesFolderList = []
-    dcmFilesList=[]
-    valueList=[]
-    datasets=[]
-    seriesNumberList=[]
-    for dirpath,dirs,files in  os.walk(dicomPath):
-        for x in files:
-            path=os.path.join(dirpath,x)
-            if path.endswith('dcm') or path.endswith('DCM'):
-                if reject:
-                    if read_trigger(path,reject=reject,default=default)==False:
-                        continue
-                    else:
-                        triggerList.append(read_trigger(path))
-                        dcmFilesList.append(path)
-                else:
-                    triggerList.append(read_trigger(path))
-                    dcmFilesList.append(path)
-                try:
-                    seriesNumberList.append(read_seriers(path))
-                    valueList.append(get_value(path))
-                except:
-                    print('Something Wrong with read Trigger')
-    if sortBy=='seriesNumber':
-        try:
-            dcmFilesList=sorted(dcmFilesList,key=read_seriers)
-            print(sorted(seriesNumberList))
-        except:
-            print('sortBy seriers number not working, try sortBy=tval')
-    elif sortBy=='tval':
-        try:            
-            valueList=sorted(list(valueList))
-            dcmFilesList=sorted(dcmFilesList,key=get_value)
-        except:
-
-            print('DWI is included, the output is not sorted')
-
-    datasets = [pydicom.dcmread(path)
-                                    for path in tqdm(dcmFilesList)]
-    #print(dcmFilesList)
-    sliceLocsArray=[]
-    
-    img = datasets[0].pixel_array
-    Nx, Ny = img.shape
-    NdNz = len(datasets)
-    data = np.zeros((Nx,Ny,NdNz))
-    print(data.shape)
-    for ds in datasets:
-                sliceLocsArray.append(abs(float(ds.SliceLocation)))
-    sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-    Nz = len(sliceLocs)
-    Nd=int(NdNz/Nz)
-    print(sliceLocs)
-    data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    j_dict={}
-    if sortSlice:
-        for i in range(Nz):
-            j_dict[str(i)]=0
-        for ds in datasets:
-            i=list(sliceLocs).index(abs(float(ds.SliceLocation)))
-            data_final[:,:,i,j_dict[str(i)]] = ds.pixel_array
-            j_dict[str(i)]+=1
-        Nd = int(NdNz/Nz)
-        data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    print(triggerList)
-    return data_final,valueList,dcmFilesList
-
-#Match the file and 
-def get_value(input_string):
-    pattern = r"(?i)(Ti|TE)[_]?(\d+)[ms]?"
-    match = re.search(pattern, input_string)
-    if match:
-        return int(match.group(2))
-    else:
-        # Return a very large value if 'Ti' or 'ti' is not found
-        return 'inf'
-def read_seriers(filePath):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    seriesNumber=reader.GetMetaData('0020|0011') 
-    seriesNumber = int(seriesNumber)
-    return seriesNumber
-
-def read_trigger(filePath,reject=False,default=327,sigma=100):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    try:
-        triggerTime=float(reader.GetMetaData('0018|1060'))
-        nominalTime=float(reader.GetMetaData('0018|1062'))
-    except:
-        return 0
-    readList=[float(default+i*nominalTime) for i in range(-5,5,1)]
-    if reject:
-        if min([abs(triggerTime - t)  for t in readList]) >sigma:
-            return False
-        else:
-            return triggerTime
-    return triggerTime
 # %%

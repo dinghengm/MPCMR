@@ -329,7 +329,7 @@ class diffusion:
 
 
     # calculate diffusion tensor class method
-    def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False):
+    def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False, bclickCOM=False):
         '''
         Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
         '''
@@ -379,69 +379,281 @@ class diffusion:
         self.colFA = np.abs(self.pvec)*np.tile(self.fa[:,:,:,np.newaxis],(1,1,1,3))
 
         if bCalcHA:
-            try:
-                self.ha = calcHA(self.pvec, self.CoM)
-            except:
+            if bclickCOM:
                 self.go_define_CoM()
                 self.ha = calcHA(self.pvec, self.CoM)
+            else:
+                try:
+                    self.ha = calcHA(self.pvec, self.CoM)
+                except:
+                    self.go_define_CoM()
+                    self.ha = calcHA(self.pvec, self.CoM)
         else:
             self.ha = np.copy(self.fa)*0
+        
         #except:
         #    self.ha = np.zeros(fa.shape)
         #    print('No LV mask!! Cannot run HA calculation: run *.go_segment_LV() class method first')
         
 
     # segment LV endo and epi borders
-    def go_segment_LV(self, z=-1):
+    def go_segment_LV(
+        self, 
+        z=-1, 
+        reject=None, 
+        image_type="b0_avg", 
+        cmap="gray", 
+        dilate=True, 
+        kernel=3, 
+        roi_names=['endo', 'epi']
+    ):
         '''
         Segment the LV
+        
+        Input:
+            * z: slices to segment, -1 (default) to segment all
+            * reject: slices to reject (will not have to segment, will not contribute to stats)
+            * image_type: 
+                    - "b0_avg": average of all b0 (really b=50) images
+                    - "b0": first b0 image
+                    - "MD": md map
+                    - "HA": ha map
+                    - "HA overlay": shows HA masked by current LV mask over b0_avg
+            * cmap: color map, default is "gray" (may want "jet" for HA)
+            * dilate: for "HA overlay", dilates current LV mask
+            * kernel: dictates how much the LV mask is dilated (higher kernel = more dilation)
+            * roi names: rois to generate, default ['endo', 'epi'], but may want ['endo', 'epi', 'septal', 'lateral']
+        '''
+        # you will need to use this decorator to make this work --> %matplotlib qt
+        print('Segment of the LV')
+
+        if image_type == "HA overlay":
+            alpha = 1.0*self.mask_lv
+            if dilate:
+                import cv2
+                kernel = np.ones((kernel, kernel), np.uint8)
+                alpha = cv2.dilate(alpha, kernel, iterations=1)
+                alpha = 1.0*(alpha > 0)
+            
+        if z == -1: # new ROI
+            self.mask_endo = np.full((self._data).shape[:3], False, dtype=bool) # [None]*self.Nz
+            self.mask_epi = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_lv = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_septal = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.mask_lateral = np.full((self._data).shape[:3], False, dtype=bool) #[None]*self.Nz
+            self.CoM = [None]*self.Nz
+            slices = np.arange(self.Nz)
+            
+            if reject != None:
+                slices = np.delete(slices, reject)
+        
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+        for z in slices:
+            
+            if image_type == "b0":
+                image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+            
+            elif image_type == "b0_avg":
+                image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap)
+                
+            elif image_type == "MD":
+                image = self.md[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA overlay":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1), cmap="gray")
+                plt.imshow(image, cmap="jet", alpha=alpha[...,z])
+            
+            # draw ROIs
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            
+            if np.any(np.array(roi_names) == "endo"):
+                self.mask_endo[..., z] = multirois.rois['endo'].get_mask(image)
+            
+            if np.any(np.array(roi_names) == "epi"):
+                self.mask_epi[..., z] = multirois.rois['epi'].get_mask(image)
+            
+            self.mask_lv[..., z] = self.mask_epi[..., z]^self.mask_endo[..., z]
+            
+            if np.any(np.array(roi_names) == "septal"):
+                self.mask_septal[..., z] = multirois.rois['septal'].get_mask(image)
+            
+            if np.any(np.array(roi_names) == "lateral"):
+                self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
+            
+            # COM
+            ind = np.where(self.mask_endo[..., z]>0)
+            self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
+
+    def go_resegment_LV(self, z=-1, reject=None, image_type="HA overlay", cmap="gray", dilate=True, kernel=3, roi_names=['endo', 'epi']):
+        '''
+        Adjust segmentations
+        
+        Input:
+            * z: slices to segment, -1 (default) to resegment all
+            * image_type: 
+                    - "b0_avg": average of all b0 (really b=50) images
+                    - "b0": first b0 image
+                    - "MD": md map
+                    - "HA": ha map
+                    - "HA overlay": shows HA masked by current LV mask over b0_avg
+            * dilate: for "HA overlay", dilates current LV mask
+            * cmap: color map, "gray" (default) for grayscale, may want "jet" for HA
+            * roi_names: ROIs you want to redraw
+        
+        '''
+        # you will need to use this decorator to make this work --> %matplotlib qt
+
+        if image_type == "HA overlay":
+            alpha = 1.0*self.mask_lv
+            if dilate:
+                import cv2
+                kernel = np.ones((kernel, kernel), np.uint8)
+                alpha = cv2.dilate(alpha, kernel, iterations=1)
+                alpha = 1.0*(alpha > 0)
+            
+        if z == -1: # new ROI
+            slices = np.arange(self.Nz)
+            
+            if reject != None:
+                slices = np.delete(slices, reject)
+        
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+        for z in slices:
+            
+            if image_type == "b0":
+                image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+            
+            elif image_type == "b0_avg":
+                image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap)
+                
+            elif image_type == "MD":
+                image = self.md[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA overlay":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1), cmap="gray")
+                plt.imshow(image, cmap="jet", alpha=alpha[...,z])
+            
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            if np.any(np.array(roi_names) == "endo"):
+                self.mask_endo[..., z] = multirois.rois['endo'].get_mask(image)
+            if np.any(np.array(roi_names) == "epi"):
+                self.mask_epi[..., z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv[..., z] = self.mask_epi[..., z]^self.mask_endo[..., z]
+            if np.any(np.array(roi_names) == "septal"):
+                self.mask_septal[..., z] = multirois.rois['septal'].get_mask(image)
+            if np.any(np.array(roi_names) == "lateral"):
+                self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
+
+            
+    # segment LV endo and epi borders
+    def go_refine_HATLV(self, z=-1, dilate=False, kernel=3, roi_names=['endo', 'epi']):
+        '''
+        Create LV mask for HAT calculation
+        
+        Input:
+            * z: slices to refine, -1 (default) to refine all
         
         For each slice:
             1. Click new ROI, draw endocardium, double click to finish
             2. Click new ROI, draw epicardium, double click to finish
-            3. Click new ROI, draw septal ROI, double click to finish
-            4. Click new ROI, draw lateral ROI, double click to finish
             5. Click finish to go to next slice
         '''
         # you will need to use this decorator to make this work --> %matplotlib qt
-        if z == -1: #new ROI
-            self.mask_endo = [None]*self.Nz
-            self.mask_epi = [None]*self.Nz
-            self.mask_lv = [None]*self.Nz
-            self.mask_septal = [None]*self.Nz
-            self.mask_lateral = [None]*self.Nz
-            self.CoM = [None]*self.Nz
-            slices = range(self.Nz)
+        print('Refinethe HAT LV mask')
+
+        if z == -1: # all slices
+            slices = np.arange(self.Nz)
+            self.mask_lv_HAT = np.copy(self.mask_lv)
+            self.mask_endo_HAT = np.copy(self.mask_endo)
+            self.mask_epi_HAT = np.copy(self.mask_epi)
+            
         else: # modify a specific slice for ROI
-            slices = [z]
-
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+                
+        if dilate:
+            import cv2
+            kernel = np.ones((kernel, kernel), np.uint8)
+            lv_mask = cv2.dilate(1.0*self.mask_lv, kernel, iterations=1)
+            lv_mask = (lv_mask > 0)      
+        else:
+            lv_mask = self.mask_lv
+            
         for z in slices:
-            image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+            # plot avg b0 image
+            image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
             fig = plt.figure()
-            plt.imshow(image, cmap='gray')
-            plt.title('Slice '+str(z))
-            fig.canvas.manager.set_window_title('Slice '+str(z))
-            multirois = MultiRoi(fig=fig, roi_names=['endo', 'epi','septal','lateral'])
-            self.mask_endo[z] = multirois.rois['endo'].get_mask(image)
-            self.mask_epi[z] = multirois.rois['epi'].get_mask(image)
-            self.mask_lv[z] = self.mask_epi[z]^self.mask_endo[z]
-            self.mask_septal[z] = multirois.rois['septal'].get_mask(image)
-            self.mask_lateral[z] = multirois.rois['lateral'].get_mask(image)
-            ind = np.where(self.mask_endo[z]>0)
-            self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
-
+            plt.imshow(image, cmap="gray", vmax=np.max(image)*0.6)
+            # plot HA overlay
+            plt.imshow(self.ha[...,z], cmap="jet", alpha=1.0*lv_mask[..., z])    
+            
+            
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            if np.any(np.array(roi_names) == 'endo'):
+                self.mask_endo_HAT[..., z] = multirois.rois['endo'].get_mask(image)
+            if np.any(np.array(roi_names) == 'epi'):
+                self.mask_epi_HAT[..., z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv_HAT[..., z] = self.mask_epi_HAT[..., z]^self.mask_endo_HAT[..., z]
+            
+       
 
     def go_define_CoM(self):
         '''
         Double click to define the COM for each slice
         '''
+        print('Define CoM for quick HA estimate')
         self.CoM = [None]*self.Nz
         for z in range(self.Nz):
-            image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+            #image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1) #self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+            image=self._data[:,:,z,0]
             fig = plt.figure()
-            plt.imshow(image, cmap='gray')
-            plt.title('Slice '+str(z) + ", Double Click Center")
-            fig.canvas.manager.set_window_title('Slice '+str(z))
+            plt.imshow(image, cmap='gray', vmax=np.max(image)*0.6)
+            plt.title('Slice '+ str(z) + ", Double Click Center")
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
             roi_CoM = RoiPoly(fig=fig, color='r')
             self.CoM[z] = np.array([np.mean(roi_CoM.y), np.mean(roi_CoM.x)])
             
@@ -477,20 +689,21 @@ class diffusion:
             print('Failed saving!!!!')
 
 
-    # calculate the diffusion parameters for LV
     def show_calc_stats_LV(self):
         '''
         Print gloabl LV MD and LV FA values
         '''
-        print('Global LV MD: ' + np.mean(self.md[self.mask_lv]*1000) + ' +/- ' +  
-                                 np.std(self.md[self.mask_lv]*1000) + ' um^2/ms')
-        print('Global LV FA: ' + np.mean(self.fa[self.mask_lv]) + ' +/- ' +  
-                                 np.std(self.fa[self.mask_lv]) + ' ')
+        
+        self.hat = calcHAT(self.ha, self.mask_lv)
+        
+        print(f'Global LV MD: {np.mean(self.md[self.mask_lv]*1000): .2f} +/- {np.std(self.md[self.mask_lv]*1000): .2f} um^2/ms')
+        print(f'Global LV FA: {np.mean(self.fa[self.mask_lv]): .2f} +/- {np.std(self.fa[self.mask_lv]): .2f}')
+        print(f'Global LV HAT: {self.hat: .2f}')
 
 
-    def export_stats(self, filename=None, path=None, ID=None, bMaynard=False): 
+    def export_stats(self, filename=None, path=None, ID=None, bGlobalOnly=True, bPerSlice=False, bMaynard=False, id=None): 
         '''
-        Export stats to .csv file
+        Export stats to .csv file. If filename already exists, the stats data is appended to the existing file
         
         Inputs:
             * filename: full path where the csv file will be saved (ending in '.csv')
@@ -499,50 +712,92 @@ class diffusion:
             * path: if filename=None, path defines where the csv file is saved
                         if None (default), the path is the directory the data was loaded from
             * ID: if filename=None, ID defines the name of the saved csv file
+            * bGlobalOnly: (boolean) only report global values - not septal/lateral (default=True)
+            * bPerSlice: (boolean) report values per slice (default=False)
             * bMaynard: (boolean) saves to Maynard if True, default is False
         '''
-        try:
-            if path == None:
-                path = self.path
-            if ID == None:
-                ID = self.ID
-            if bMaynard or self.bMaynard:
-                path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
-            if filename is None:
-                filename=path+'/' + ID + '.csv'
-
-            stats = [ID,
-                    np.mean(self.md[self.mask_lv]*1000),
-                    np.mean(self.md[self.mask_septal]*1000),
-                    np.mean(self.md[self.mask_lateral]*1000),
-                    np.mean(self.fa[self.mask_lv]),
-                    np.mean(self.fa[self.mask_septal]),
-                    np.mean(self.fa[self.mask_lateral]),
-                    ]
-
-            try:
-                df = pd.read_csv(filename, index=False)
-                df.loc[df['ID']==ID] = stats
+        # try:
+        if path == None:
+            path = self.path
+        if ID == None:
+            ID = self.ID
+        if bMaynard or self.bMaynard:
+            path = '/Volumes/Project/DTMRI/_DTMRI_CIRC/0CIRC'
+        if filename is None:
+            filename=path+'/' + ID + '.xlsx'
             
-            except:
-                self.dti_stats = pd.DataFrame({        
-                                        'ID': stats[0], 
-                                        'MD global': stats[1],
-                                        'MD septal': stats[2],
-                                        'MD lateral': stats[3],
-                                        'FA global': stats[4],
-                                        'FA septal': stats[5],
-                                        'FA lateral': stats[6],
-                                         })
-            self.dti_stats.to_csv(filename, index=False, header=False)
-            print('Saved '+ filename +' successfully!')
-        except:
-            print('Failed export!!!')
+        self.hat = calcHAT(self.ha, self.mask_lv)
 
+        
+        # export stats
+        
+        if bGlobalOnly:
+            if bPerSlice:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global MD (per slice)": [np.sum(self.md*self.mask_lv*1000, axis=(0,1)) / np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global FA (per slice)": [np.sum(self.fa*self.mask_lv, axis=(0,1)) /np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global HAT": self.hat,
+                    "Global HAT (per slice)": [calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100)]
+                })    
+            
+            else:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global HAT": self.hat,
+                })
+        
+        else:
+            if bPerSlice:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global MD (per slice)": [np.sum(self.md*self.mask_lv*1000, axis=(0,1)) / np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Septal MD": np.mean(self.md[self.mask_septal]*1000),
+                    "Septal MD (per slice)": [np.sum(self.md*self.mask_septal*1000, axis=(0,1)) / np.max([np.sum(self.mask_septal, axis=(0,1)), np.ones(self.Nz)])],
+                    "Lateral MD": np.mean(self.md[self.mask_lateral]*1000),
+                    "Lateral MD (per slice)": [np.sum(self.md*self.mask_lateral*1000, axis=(0,1)) / np.max([np.sum(self.mask_lateral, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Global FA (per slice)": [np.sum(self.fa*self.mask_lv, axis=(0,1)) /np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Septal FA": np.mean(self.fa[self.mask_septal]),
+                    "Septal FA (per slice)": [np.sum(self.fa*self.mask_septal, axis=(0,1)) / np.max([np.sum(self.mask_septal, axis=(0,1)), np.ones(self.Nz)])],
+                    "Lateral FA": np.mean(self.fa[self.mask_lateral]),
+                    "Lateral FA (per slice)": [np.sum(self.fa*self.mask_lateral, axis=(0,1)) / np.max([np.sum(self.mask_lateral, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global HAT": self.hat,
+                    "Global HAT (per slice)": [calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100)]
+                })
+            
+            else:
+                self.dti_stats = pd.DataFrame({
+                    "ID": [ID],
+                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Septal MD": np.mean(self.md[self.mask_septal]*1000),
+                    "Lateral MD": np.mean(self.md[self.mask_lateral]*1000),
+                    "Global FA": np.mean(self.fa[self.mask_lv]),
+                    "Septal FA": np.mean(self.fa[self.mask_septal]),
+                    "Lateral FA": np.mean(self.fa[self.mask_lateral]),
+                    "Global HAT": self.hat,
+                })
+                
+        if os.path.isfile(filename):  
+            startrow = len(pd.read_excel(filename)) + 1
+            with pd.ExcelWriter(filename, mode="a", engine="openpyxl", if_sheet_exists='overlay') as writer:  
+                self.dti_stats.to_excel(writer,  index=False, header=False, startrow=startrow)
 
+        else:
+            self.dti_stats.to_excel(filename, index=False)
+        
+        print('Saved '+ filename +' successfully!')
+        
+        # except:
+            # print('Failed export!!!')
     # read in dicoms
-    def dicomread(self, dirpath='.',bFilenameSorted=True):
-        #print('Path to the DICOM directory: {}'.format(dirpath))
+    def dicomread(self, dirpath='.', bFilenameSorted=True):
+        # print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
         dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
         if dicom_filelist == []:
@@ -575,46 +830,73 @@ class diffusion:
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
 
-        sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-        Nz = len(sliceLocs)
-        
-        if bFilenameSorted:
+        # check mosaic
+        if 'MOSAIC' in datasets[0].ImageType:
+            print('Detected Mosaic...')
+            acqMat = np.array(datasets[0].AcquisitionMatrix)
+            acqMat = acqMat[acqMat > 0]
+            Nx = acqMat[0]
+            Ny = acqMat[1]
+            Rows = datasets[0].Rows
+            Cols = datasets[0].Columns
+            Nd = NdNz
+            data2 = np.zeros((Nx,Ny,1000,Nd)) #larger numebr of slices than needed
+            if Nx > Rows or np.mod(Rows,Nx) != 0:
+                Nx = acqMat[2]
+                Ny = acqMat[1]
+            
+            z = 0
+            for x in range(Nx,Rows,Nx):
+                for y in range(Ny,Cols,Ny):
+                    data2[:,:,z,:] = data[(x-Nx):x,(y-Ny):y,:]
+                    z = z+1
+            Nz = z-1
+            data_final = data2[:,:,0:Nz,:]
             diffBValTarget = diffBValArray
             diffGradTarget = diffGradArray
-            Nd = int(NdNz/Nz)
-            data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
+            diffDicomHDRRange = range(Nd)
 
         else:
-            # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
-            # take first slice and find the order of b-values and gradients --> this is our new order
-            # NB: Each slice could have their own order so we need to reorder each slice
-            # this is SUPER slow but at least everything is in the right order
-            print('...Trying exhausted search and sort of dicom')
-            index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
-            diffBValTarget = np.array(diffBValArray)[index]
-            diffGradTarget = np.array(diffGradArray)[index]
-            Nd = len(diffBValTarget)
+            sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
+            Nz = len(sliceLocs)
+        
+            if bFilenameSorted:
+                diffBValTarget = diffBValArray
+                diffGradTarget = diffGradArray
+                Nd = int(NdNz/Nz)
+                data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
+            else:
+                # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
+                # take first slice and find the order of b-values and gradients --> this is our new order
+                # NB: Each slice could have their own order so we need to reorder each slice
+                # this is SUPER slow but at least everything is in the right order
+                print('...Trying exhausted search and sort of dicom')
+                index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
+                diffBValTarget = np.array(diffBValArray)[index]
+                diffGradTarget = np.array(diffGradArray)[index]
+                Nd = len(diffBValTarget)
 
-            data_final = np.zeros((Nx,Ny,Nz,Nd))
-            data_final[:,:,0,:] = data[:,:,index]
+                data_final = np.zeros((Nx,Ny,Nz,Nd))
+                data_final[:,:,0,:] = data[:,:,index]
 
-            for z in tqdm(range(Nz)):
-                if z == 0:
-                    continue
-                sliceIndex = np.array(sliceLocsArray == 
-                                    sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
-                dataSlice = data[:,:,sliceIndex]
-                for d in range(Nd):
-                    for dd in range(Nd):
-                        if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
-                            if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
-                                data_final[:,:,z,d] = dataSlice[:,:,dd]
+                for z in tqdm(range(Nz)):
+                    if z == 0:
+                        continue
+                    sliceIndex = np.array(sliceLocsArray == 
+                                        sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
+                    dataSlice = data[:,:,sliceIndex]
+                    for d in range(Nd):
+                        for dd in range(Nd):
+                            if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
+                                if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
+                                    data_final[:,:,z,d] = dataSlice[:,:,dd]
+            diffDicomHDRRange = range(0,NdNz,Nz)
 
         # create numpy arrays and rotate diffusion gradients into image plane
         diffGrad = np.zeros((Nd,3))
         diffBVal = np.zeros((Nd,))
-        for d in range(0,NdNz,Nz):
-            dd = int(d/Nz)
+        for d in diffDicomHDRRange:
+            dd = int(d/diffDicomHDRRange.step) #int(d/Nz)
             diffBVal[dd] = diffBValTarget[d]
             diffGrad[dd,0] = np.dot(xaxis, diffGradTarget[d])
             diffGrad[dd,1] = np.dot(yaxis, diffGradTarget[d])
@@ -662,6 +944,7 @@ class diffusion:
                                 facet_col=2, 
                                 facet_col_wrap=np.min([volume.shape[2],3]), 
                                 facet_col_spacing=0.01,
+                                facet_row_spacing=0.01,
                                 binary_string=False,
                                 color_continuous_scale=cmap,
                                 template='plotly_dark',
@@ -707,16 +990,16 @@ class diffusion:
         colFA[...,1] = temp
 
         fig1 = px.imshow(md, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01, template='plotly_dark',
+                         facet_col_spacing=0.01,facet_row_spacing=0.01, template='plotly_dark',
                          color_continuous_scale='hot', zmin=0, zmax=0.003)
         fig2 = px.imshow(fa, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,template='plotly_dark',
+                         facet_col_spacing=0.01,facet_row_spacing=0.01,template='plotly_dark',
                          color_continuous_scale='dense', zmin=0, zmax=0.5)
         fig3 = px.imshow(ha, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,template='plotly_dark',
+                         facet_col_spacing=0.01,facet_row_spacing=0.01,template='plotly_dark',
                          color_continuous_scale='jet', zmin=-90, zmax=90)
         fig4 = px.imshow(colFA, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01, template='plotly_dark')
+                         facet_col_spacing=0.01,facet_row_spacing=0.01, template='plotly_dark')
 
         fig1.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
         fig2.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
@@ -1209,6 +1492,148 @@ def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
     return ha_map
 
     
+
+def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
+    Nx, Ny, Nz = ha.shape
+    thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
+    hatMean = 0.
+    NTotalSpokes = 0
+    if method == "OLS":
+        for z in range(Nz):
+            if (not np.any(np.array(reject_slice)==z)) * (not np.all(lv_mask[:,:,z] == 0)):
+                ind = np.where(lv_mask[:,:,z])
+                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
+                for theta in thetaArray:
+                    spoke = []
+                    for r in range(np.min([Nx,Ny])):
+                        x = int(r*np.cos(theta)+CoM[0])
+                        y = int(r*np.sin(theta)+CoM[1])
+                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
+                            continue
+                        if lv_mask[x,y,z]:
+                            spoke.append(ha[x,y,z])
+                    
+                    if len(spoke) > 2:
+                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
+                        hat, _ = np.polyfit(transmuralDepth, spoke, 1)
+                        hatMean += hat
+                        NTotalSpokes += 1
+
+                        
+    if method == "WLS":        
+        for z in range(Nz):
+            if (not np.any(np.array(reject_slice)==z)) * (not np.all(lv_mask[:,:,z] == 0)):
+                ind = np.where(lv_mask[:,:,z])
+                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
+                for theta in thetaArray:
+                    spoke = []
+                    for r in range(np.min([Nx,Ny])):
+                        x = int(r*np.cos(theta)+CoM[0])
+                        y = int(r*np.sin(theta)+CoM[1])
+                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
+                            continue
+                        if lv_mask[x,y,z]:
+                            spoke.append(ha[x,y,z])
+                    
+                    if len(spoke) > 2:
+                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
+                        res_sm = sm.OLS(spoke, sm.add_constant(transmuralDepth)).fit()
+                        
+                        for _ in range(Niter):
+                            
+                            res_resid = sm.OLS([abs(resid) for resid in res_sm.resid], sm.add_constant(res_sm.fittedvalues)).fit()
+                            mod_fv = res_resid.fittedvalues
+                            mod_fv[mod_fv == 0] = np.min(np.delete(mod_fv, np.argwhere(mod_fv==0))) # handle division by 0
+                            weights = 1 / (mod_fv**2)
+                            res_sm = sm.WLS(spoke, sm.add_constant(transmuralDepth), weights=weights).fit()
+
+                        hat = res_sm.params
+                            
+                        hatMean += hat[1]
+                        NTotalSpokes += 1
+
+                        
+    return hatMean / NTotalSpokes
+
+
+
+# calculate helix angle transmurality
+def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
+    Nx, Ny, Nz = ha.shape
+    thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
+    
+    HAT_perslice = []
+    
+    if method == "OLS":
+        
+        for z in range(Nz):
+            hatMean = 0.
+            NTotalSpokes = 0
+            
+            if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
+                ind = np.where(lv_mask[:,:,z])
+                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
+                for theta in thetaArray:
+                    spoke = []
+                    for r in range(np.min([Nx,Ny])):
+                        x = int(r*np.cos(theta)+CoM[0])
+                        y = int(r*np.sin(theta)+CoM[1])
+                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
+                            continue
+                        if lv_mask[x,y,z]:
+                            spoke.append(ha[x,y,z])
+                    
+                    if len(spoke) > 2:
+                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
+                        hat, _ = np.polyfit(transmuralDepth, spoke, 1)
+                        hatMean += hat
+                        NTotalSpokes += 1
+            
+            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
+        
+        
+    if method == "WLS":
+        
+        for z in range(Nz):
+            hatMean = 0.
+            NTotalSpokes = 0
+            
+            if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
+                ind = np.where(lv_mask[:,:,z])
+                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
+                for theta in thetaArray:
+                    spoke = []
+                    for r in range(np.min([Nx,Ny])):
+                        x = int(r*np.cos(theta)+CoM[0])
+                        y = int(r*np.sin(theta)+CoM[1])
+                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
+                            continue
+                        if lv_mask[x,y,z]:
+                            spoke.append(ha[x,y,z])
+                    
+                    if len(spoke) > 2:
+                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
+                        res_sm = sm.OLS(spoke, sm.add_constant(transmuralDepth)).fit()
+                        
+                        for _ in range(Niter):
+                            
+                            res_resid = sm.OLS([abs(resid) for resid in res_sm.resid], sm.add_constant(res_sm.fittedvalues)).fit()
+                            mod_fv = res_resid.fittedvalues
+                            mod_fv[mod_fv == 0] = np.min(np.delete(mod_fv, np.argwhere(mod_fv==0))) # handle division by 0
+                            weights = 1 / (mod_fv**2)
+                            res_sm = sm.WLS(spoke, sm.add_constant(transmuralDepth), weights=weights).fit()
+
+                        hat = res_sm.params
+                            
+                        hatMean += hat[1]
+                        NTotalSpokes += 1
+            
+            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
+        
+                    
+    return HAT_perslice    
+        
+
 
 
 
