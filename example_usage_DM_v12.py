@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
 plt.rcParams['savefig.dpi'] = 300
 # %%
-CIRC_ID='CIRC_00324'
+CIRC_ID='CIRC_00373'
 dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI\MR000000.dcm')
 ID = os.path.dirname(dicomPath).split('\\')[-1]
 MP03 = mapping(data=dicomPath,ID=ID,CIRC_ID=CIRC_ID)
@@ -39,15 +39,17 @@ MP01.cropzone=cropzone
 #%%
 MP01.go_crop()
 MP01.go_resize(scale=2)
-MP01.go_moco()
-MP01.imshow_corrected(ID='MP01_T1_Truncated_1')
-
+fig,axs=MP01.imshow_corrected(ID='MP01_T1_Truncated_1')
+for i in range(np.shape(axs)[-1]):
+    axs[0,i].set_title(f'{i}',fontsize=5)
+img_dir= os.path.join(os.path.dirname(MP01.path),f'{MP01.CIRC_ID}_{MP01.ID}_Original')
+plt.savefig(img_dir)
 #%%
 #Please: subtract the one you don't want
 #MP01._delete(d=[0,2,3,4,5,7,10,11,-4,-7])
-MP01._delete(d=[1,3,4,6,7,-1,-4,-5,-7,-10])
+MP01._delete(d=[2,3,5,6,7,8,12,13,20,21,23,28,29,31,32,35,36,37])
 MP01.go_moco()
-MP01.imshow_corrected(ID='MP01_T1_Truncated_2')
+fig,axs=MP01.imshow_corrected(ID='MP01_T1_Truncated_2')
 
 # %%
 #Read MP02
@@ -67,6 +69,7 @@ MP02.imshow_corrected(ID='MP02_T2_raw')
 #Perform on the first images:
 #MP02-MP01
 #Insert the MP01 to MP02
+print('Conducting Moco in MP02')
 MP02_temp=np.concatenate((np.expand_dims(MP01._data[:,:,:,0],axis=-1),MP02._data),axis=-1)
 MP02_regressed=decompose_LRT(MP02_temp)
 #Show the images
@@ -80,6 +83,7 @@ MP02.imshow_corrected(ID='MP02_T2_Combined')
 
 #%%
 #MP03-MP01
+print('Conducting Moco in MP03')
 MP03_temp=np.concatenate((np.expand_dims(MP01._data[:,:,:,0],axis=-1),MP03._data),axis=-1)
 MP03_regressed=decompose_LRT(MP03_temp)
 Nx,Ny,Nz,_=np.shape(MP03_temp)
@@ -88,9 +92,9 @@ for z in range(Nz):
     MP03_temp_corrected_temp[:,:,z,:]=MP03._coregister_elastix(MP03_regressed[:,:,z,:],MP03_temp[:,:,z,:])
 MP03._data=MP03_temp_corrected_temp[:,:,:,1::]
 MP03.imshow_corrected(ID='MP03_Combined')
-
-
-
+generateVolumeGIFwithRaw(MP01)
+generateVolumeGIFwithRaw(MP02)
+generateVolumeGIFwithRaw(MP03)
 #%%
 #Get the Maps
 ADC=MP03.go_cal_ADC()
@@ -114,6 +118,15 @@ map_data=sio.loadmat(os.path.join(path,'MP02_T2.mat'))
 map_data=map_data['T2']
 MP02._map= map_data
 MP02.imshow_map()
+#%%
+#PLOT MOCO
+Nz=MP01.Nz
+A2=np.copy(MP01._data)
+for i in range(Nz):
+    A2[:,:,i,:] = MP01._data[...,i,:]/np.max(MP01._data[...,i,:])*255
+
+for i in range(Nz):
+    MP01.createGIF(f'{MP01.ID}_moco_{i}.gif',A2[:,:,i,:],fps=5)
 # %%
 #%matplotlib qt <--- you need this if you haven't turned it on in vscode
 MP03.go_segment_LV(reject=None, image_type="b0")

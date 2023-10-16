@@ -872,7 +872,6 @@ class mapping:
                                 if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
                                     data_final[:,:,z,d] = dataSlice[:,:,dd]
             diffDicomHDRRange = range(0,NdNz,Nz)
-
         # create numpy arrays and rotate diffusion gradients into image plane
         diffGrad = np.zeros((Nd,3))
         diffBVal = np.zeros((Nd,))
@@ -971,11 +970,12 @@ class mapping:
                 axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
                 axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
                 axs[z,d].axis('off')
-        plt.show()
+        #plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
         img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_Original')
         if plot:
             plt.savefig(img_dir)
+        return fig,axs
     def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
         try:
             Nx,Ny,Nz=np.shape(self._map)
@@ -1169,8 +1169,9 @@ class mapping:
         # apply crop
         data_crop = np.zeros(shape) #use updated shape
         
-        for z in tqdm(range(self.Nz)):
-            for d in range(self.Nd):
+        Nx,Ny,Nz,*Nd=np.shape(data)
+        for z in tqdm(range(Nz)):
+            for d in range(Nd):
                 data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
 
         return data_crop, cropzone    
@@ -2127,4 +2128,3 @@ def read_trigger(filePath,reject=False,default=327,sigma=100):
         else:
             return triggerTime
     return triggerTime
-# %%

@@ -67,7 +67,7 @@ data_final, diffBVal, diffGrad, datasets=dti.dicomread(dirpath=path)
 crop_data,cropzone=dti._crop(data_final)
 #dti.imshow() #show current class data
 #%%
-#pLOT THE ORIGINAL
+#pLOT THE ORIGINAL in slice 6
 import numpy as np
 A2=np.copy(crop_data)
 k=60
@@ -273,11 +273,6 @@ for i in range(22):
 fig.suptitle('Regress First')
 
 #%%
-
-
-
-
-
 
 
 # %% SINGLE CLIKC SECTION ##################################
