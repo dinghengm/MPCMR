@@ -1754,7 +1754,7 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
 #TODO      
 #Make a weighted least square fit
 #Equation: abs(ra+rb *exp(-TI/T1))
-def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,plot=False):
+def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=1):
 
     def ir_recovery(tVec,T1,ra,rb):
         #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
@@ -1771,61 +1771,65 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,plot=False):
     bEstTmps=[]
     T1EstTmps=[]
     resTmps=[]
+    minIndTmps=[]
     minInd=np.argmin(ydata)
     if minInd==0:
         minInd=1
     elif minInd==len(TIlist):
         minInd=len(TIlist)-1
     #Invert the data to before,at,after the min
-    for ii in range(3):
+    for ii in range(2):
         if ii==0:
             #before at the min
-            minIndTmp=minInd-1
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
-        if ii==1:
-            #at the min
             minIndTmp=minInd
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
             dataTmp=ydata*invertMatrix.T
-        if ii==2:
-            #after the min
+            minIndTmps.append(minIndTmp)
+        if ii==1:
+            #at the min
             minIndTmp=minInd+1
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
             dataTmp=ydata*invertMatrix.T
-        try:
-            params,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000)
-            T1_exp,ra_exp,rb_exp=params
+            minIndTmps.append(minIndTmp)
+        if ii==2:
+            #after the min
+            minIndTmp=minInd+2
+            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+            dataTmp=ydata*invertMatrix.T
+            minIndTmps.append(minIndTmp)
+        params_OLS,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000)
+        T1_exp,ra_exp,rb_exp=params_OLS
+        ydata_exp_OLS=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        if type=='WLS':
+            for _ in range(Niter):
+                ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+                if error=='l1':
+                    simga_square=abs(ydata_exp-dataTmp)
+                elif error=='l2':
+                    simga_square=abs(ydata_exp-dataTmp)**2
+                weights = 1 / (simga_square)
+                params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000,sigma=weights,absolute_sigma=True)
+                #print(weights)
+                T1_exp,ra_exp,rb_exp=params_WLS
+            ###If the error is higher than OLS use OLS
             ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-            aEstTmps.append(ra_exp)
-            bEstTmps.append(rb_exp)
-            T1EstTmps.append(T1_exp)
-            #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
-        except:
-            ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-            aEstTmps.append(ra)
-            bEstTmps.append(rb)
-            T1EstTmps.append(T1)
-            #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
-        #Get the params with least chisquare
-    #Finally, return the best fit
+            #if chisquareTest(dataTmp,ydata_exp_OLS)<chisquareTest(dataTmp,ydata_exp):
+            #    T1_exp,ra_exp,rb_exp=params_OLS
+        elif type=='OLS':
+            T1_exp,ra_exp,rb_exp=params_OLS
+            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        aEstTmps.append(ra_exp)
+        bEstTmps.append(rb_exp)
+        T1EstTmps.append(T1_exp)
+        #Get the chisquare
+        resTmps.append(chisquareTest(dataTmp,ydata_exp))
 
     returnInd = np.argmin(np.array(resTmps))
     T1_final=T1EstTmps[returnInd]
     ra_final=aEstTmps[returnInd]
     rb_final=bEstTmps[returnInd]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-    if plot:
-        plt.scatter(TIlist,ydata)
-        x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
-        ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
-        plt.plot(x_plot,ydata_exp)
-        plt.title(rf'The fitting Curve\\n,T1={T1_final}')
-        plt.xlabel('Inversion Time (ms)')
-        plt.ylabel('Signal')
-    return T1_final,ra_final,rb_final,resTmps[returnInd]
+    return T1_final,ra_final,rb_final,resTmps,int(minIndTmps[returnInd])
 def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
     #Parallel is not able to use not
     from multiprocessing import Pool
@@ -1870,7 +1874,7 @@ def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
         else:
             for x in range(Nx):
                 for y in range(Ny):
-                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1)
+                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1)
     return finalMap,finalRa,finalRb,finalRes
 
 #########################################################################################
