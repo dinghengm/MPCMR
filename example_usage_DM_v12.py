@@ -4,7 +4,7 @@
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
 from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v12 import readFolder,decompose_LRT
+from libMapping_v12 import readFolder,decompose_LRT,go_ir_fit
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -17,10 +17,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
 plt.rcParams['savefig.dpi'] = 300
 # %%
-CIRC_ID='CIRC_00373'
-dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI\MR000000.dcm')
+CIRC_ID='CIRC_00381'
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 ID = os.path.dirname(dicomPath).split('\\')[-1]
-MP03 = mapping(data=dicomPath,ID=ID,CIRC_ID=CIRC_ID)
+MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,sortBy='seriesNumber')
 #MP03 = mapping(data=r'C:\Research\MRI\MP_EPI\CIRC_00356_22737_CIRC_00356_22737\MP03_DWI_p.mapping')
 # %%
 #Motion correction
@@ -30,7 +30,7 @@ MP03.go_moco()
 MP03.imshow_corrected(ID=f'{MP03.ID}_raw')
 cropzone=MP03.cropzone
 # %%
-dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\MP01_T1')
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP01_T1')
 #CIRC_ID='CIRC_00302'
 
 ID = os.path.dirname(dicomPath).split('\\')[-1]
@@ -42,18 +42,18 @@ MP01.go_resize(scale=2)
 fig,axs=MP01.imshow_corrected(ID='MP01_T1_Truncated_1')
 for i in range(np.shape(axs)[-1]):
     axs[0,i].set_title(f'{i}',fontsize=5)
-img_dir= os.path.join(os.path.dirname(MP01.path),f'{MP01.CIRC_ID}_{MP01.ID}_Original')
-plt.savefig(img_dir)
+#img_dir= os.path.join(os.path.dirname(MP01.path),f'{MP01.CIRC_ID}_{MP01.ID}_Original')
+#plt.savefig(img_dir)
 #%%
 #Please: subtract the one you don't want
 #MP01._delete(d=[0,2,3,4,5,7,10,11,-4,-7])
-MP01._delete(d=[2,3,5,6,7,8,12,13,20,21,23,28,29,31,32,35,36,37])
+MP01._delete(d=[1,6,7,8,14,15,18,20,22,25,26,27,29])
 MP01.go_moco()
 fig,axs=MP01.imshow_corrected(ID='MP01_T1_Truncated_2')
 
 # %%
 #Read MP02
-dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\MP02_T2')
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP02_T2')
 MP02 = mapping(data=dicomPath,CIRC_ID=CIRC_ID)
 MP02.cropzone=cropzone
 # %%
@@ -92,9 +92,7 @@ for z in range(Nz):
     MP03_temp_corrected_temp[:,:,z,:]=MP03._coregister_elastix(MP03_regressed[:,:,z,:],MP03_temp[:,:,z,:])
 MP03._data=MP03_temp_corrected_temp[:,:,:,1::]
 MP03.imshow_corrected(ID='MP03_Combined')
-generateVolumeGIFwithRaw(MP01)
-generateVolumeGIFwithRaw(MP02)
-generateVolumeGIFwithRaw(MP03)
+
 #%%
 #Get the Maps
 ADC=MP03.go_cal_ADC()
@@ -106,6 +104,8 @@ MP01._save_nib()
 print(f'MP01:{MP01.valueList}')
 MP02._save_nib()
 print(f'MP02:{MP02.valueList}')
+#%%
+T1MAP=go_ir_fit(data=MP01._data,TIlist=MP01.valueList,type='WLS',Niter=2,error='l1')
 #%%
 #Load the data
 

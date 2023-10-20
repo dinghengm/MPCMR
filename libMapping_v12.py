@@ -74,7 +74,7 @@ class mapping:
     # data can be path to data or it can be numpy data
     def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
                 ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',reject=True): 
+                UIPath=None,TE=None,sortBy='tval',reject=True,default=327): 
         
         '''
         Define class object and read in data
@@ -129,7 +129,7 @@ class mapping:
                     self.ID=ID
                 if self.CIRC_ID == None:
                     self.CIRC_ID=CIRC_ID
-                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject)
+                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default)
                 self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
                 self.path = tmp
         else:
@@ -1169,7 +1169,7 @@ class mapping:
         # apply crop
         data_crop = np.zeros(shape) #use updated shape
         
-        Nx,Ny,Nz,*Nd=np.shape(data)
+        Nx,Ny,Nz,Nd=np.shape(data)
         for z in tqdm(range(Nz)):
             for d in range(Nd):
                 data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
@@ -1754,7 +1754,7 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
 #TODO      
 #Make a weighted least square fit
 #Equation: abs(ra+rb *exp(-TI/T1))
-def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=1):
+def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2):
 
     def ir_recovery(tVec,T1,ra,rb):
         #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
@@ -1830,7 +1830,7 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     rb_final=bEstTmps[returnInd]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
     return T1_final,ra_final,rb_final,resTmps,int(minIndTmps[returnInd])
-def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
+def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False,type='WLS',Niter=2,error='l2'):
     #Parallel is not able to use not
     from multiprocessing import Pool
     from functools import partial
@@ -1874,7 +1874,7 @@ def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False):
         else:
             for x in range(Nx):
                 for y in range(Ny):
-                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1)
+                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
     return finalMap,finalRa,finalRb,finalRes
 
 #########################################################################################
