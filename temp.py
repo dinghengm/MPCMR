@@ -41,8 +41,8 @@ except:
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v12 import readFolder,decompose_LRT
+from libMapping_v12 import mapping,readFolder,decompose_LRT  # <--- this is all you need to do diffusion processing
+from libMapping_v12 import *
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -56,132 +56,32 @@ defaultPath= r'C:\Research\MRI\MP_EPI'
 plt.rcParams['savefig.dpi'] = 300
 
 # %%
+#This is going to read the clinical raw data and compare my own function
 CIRC_ID='CIRC_00373'
-dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI\MR000000.dcm')
-ID = os.path.dirname(dicomPath).split('\\')[-1]
-MP03 = mapping(data=dicomPath,ID=ID,CIRC_ID=CIRC_ID)
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MR t1map_long_t1_3slice_8mm_150_gap_MOCO')
+ID = dicomPath.split('\\')[-1]
+data,valueList,dcmFilesList= readFolder(dicomPath)
+map=mapping(data=data,CIRC_ID=CIRC_ID,ID=ID)
+
+map.shape=np.shape(map._data)
+map.go_crop()
+map.shape=np.shape(map._data)
+cropzone=map.cropzone
+data=map._data
 # %%
-def get_value(filePath):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    seriesNumber=reader.GetMetaData('0018|0082') 
-    seriesNumber = int(seriesNumber)
-    return seriesNumber
-#Change Read_Sriers to readInverstion
-def read_seriers(filePath):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    seriesNumber=reader.GetMetaData('0020|0011') 
-    seriesNumber = int(seriesNumber)
-    return seriesNumber
+#Simple way: Do it outside the class
+#Read the slice TI list
+import nibabel as nib
+Slice0TIList=[]
+Slice1TIList=[]
+Slice2TIList=[]
 
-def read_trigger(filePath,reject=False,default=327,sigma=100):
-    reader = sitk.ImageFileReader()
-    reader.SetFileName( filePath )
-    reader.LoadPrivateTagsOn()
-    reader.ReadImageInformation()
-    try:
-        triggerTime=float(reader.GetMetaData('0018|1060'))
-        nominalTime=float(reader.GetMetaData('0018|1062'))
-    except:
-        return 0
-    readList=[float(default+i*nominalTime) for i in range(-5,5,1)]
-    if reject:
-        if min([abs(triggerTime - t)  for t in readList]) >sigma:
-            return False
-        else:
-            return triggerTime
-    return triggerTime
-
-def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True):
-    triggerList=[]
-    seriesIDList = []
-    seriesFolderList = []
-    dcmFilesList=[]
-    valueList=[]
-    datasets=[]
-    seriesNumberList=[]
-    for dirpath,dirs,files in  os.walk(dicomPath):
-        for x in files:
-            path=os.path.join(dirpath,x)
-            if path.endswith('dcm') or path.endswith('DCM'):
-                if reject:
-                    if read_trigger(path,reject=reject,default=default)==False:
-                        continue
-                    else:
-                        triggerList.append(read_trigger(path))
-                        dcmFilesList.append(path)
-                else:
-                    triggerList.append(read_trigger(path))
-                    dcmFilesList.append(path)
-                try:
-                    seriesNumberList.append(read_seriers(path))
-                    valueList.append(get_value(path))
-                except:
-                    print('Something Wrong with read Trigger')
-    if sortBy=='seriesNumber':
-        try:
-            dcmFilesList=sorted(dcmFilesList,key=read_seriers)
-            print(sorted(seriesNumberList))
-        except:
-            print('sortBy seriers number not working, try sortBy=tval')
-    elif sortBy=='tval':
-        try:            
-            valueList=sorted(list(valueList))
-            dcmFilesList=sorted(dcmFilesList,key=get_value)
-        except:
-
-            print('DWI is included, the output is not sorted')
-
-    datasets = [pydicom.dcmread(path)
-                                    for path in tqdm(dcmFilesList)]
-    #print(dcmFilesList)
-    sliceLocsArray=[]
-    
-    img = datasets[0].pixel_array
-    Nx, Ny = img.shape
-    NdNz = len(datasets)
-    data = np.zeros((Nx,Ny,NdNz))
-    print(data.shape)
-    for ds in datasets:
-                sliceLocsArray.append(abs(float(ds.SliceLocation)))
-    sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-    Nz = len(sliceLocs)
-    Nd=int(NdNz/Nz)
-    print(sliceLocs)
-    data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    j_dict={}
-    if sortSlice:
-        for i in range(Nz):
-            j_dict[str(i)]=0
-        for ds in datasets:
-            i=list(sliceLocs).index(abs(float(ds.SliceLocation)))
-            data_final[:,:,i,j_dict[str(i)]] = ds.pixel_array
-            j_dict[str(i)]+=1
-        Nd = int(NdNz/Nz)
-        data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-    print(triggerList)
-    return data_final,valueList,dcmFilesList
-
-# %%
-CIRC_ID='CIRC_00373'
-dicomPath=os.path.join(defaultPath,F'{CIRC_ID}_22737_{CIRC_ID}_22737\t1map_long_t1_3slice_8mm_150_gap_MOCO')
-ID = os.path.dirname(dicomPath).split('\\')[-1]
-dcmFilesList=[]
-valueList=[]
-datasets=[]
-seriesNumberList=[]
-for dirpath,dirs,files in  os.walk(dicomPath):
-    for x in files:
-        path=os.path.join(dirpath,x)
-
-        seriesNumberList.appe6nd(read_seriers(path))
-        valueList.append(get_value(path))
-        dcmFilesList.append(path)
-#MPT1_moco,value_list,dcmlist = readFolder(dicomPath=dicomPath,sortBy='tval',reject=False,sortSlice=False)
-
+for ss in range(len(valueList)//3):
+    Slice0TIList.append(valueList[0+3*ss])
+    Slice1TIList.append(valueList[1+3*ss])
+    Slice2TIList.append(valueList[2+3*ss])
+##Save it as nib
+for ss in range(map.Nz):
+    save_nii=os.path.join(os.path.dirname(dicomPath),f'{ss}_moco.nii.gz')
+    nib.save(nib.Nifti1Image(data,affine=np.eye(4)),save_nii)
 # %%

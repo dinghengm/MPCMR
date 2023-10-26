@@ -26,6 +26,9 @@
 # pip install opencv-python
 # python -m pip install statsmodels
 
+#Notes:
+# This Version 1.3 is going to calculate the slice indivisually. 
+
 # %%
 import numpy as np
 import os
@@ -74,7 +77,7 @@ class mapping:
     # data can be path to data or it can be numpy data
     def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
                 ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',reject=True,default=327,sigma=75): 
+                UIPath=None,TE=None,sortBy='tval',reject=True,default=327): 
         
         '''
         Define class object and read in data
@@ -129,7 +132,7 @@ class mapping:
                     self.ID=ID
                 if self.CIRC_ID == None:
                     self.CIRC_ID=CIRC_ID
-                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=75)
+                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default)
                 self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
                 self.path = tmp
         else:
@@ -951,47 +954,28 @@ class mapping:
                                             'eraseshape'
                                         ]})
 
-    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=True,path=None):
+    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=True):
         if volume is None:
             volume = self._data
-        if path ==None:
-            path=self.path
         if valueList==None:
             valueList=self.valueList
         if ID==None:
             ID=self.ID
-        try:
-            Nx,Ny,Nz,Nd=np.shape(volume)
-        except:
-            print('please check if you input is 4D volume')
-        if Nz==1:
-            Nx,Ny,Nz,Nd=np.shape(volume)
-            plt.style.use('dark_background')
-            fig,axs=plt.subplots(1,Nd, figsize=(1*3.3,Nd*3))
-            for d in range(Nd):
-                    if vmin is None:
-                        vmin = np.min(volume)
-                    if vmax is None:
-                        vmax = np.max(volume)
-                    axs[d].imshow(volume[:,:,0,d],cmap=cmap,vmin=vmin,vmax=vmax)
-                    axs[d].set_title(f'{valueList[d]}',fontsize=5)
-                    axs[d].axis('off')
-        elif len(np.shape(volume))==4:
-            Nx,Ny,Nz,Nd=np.shape(volume)
-            plt.style.use('dark_background')
-            fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))
-            for d in range(Nd):
-                for z in range(Nz):
-                    if vmin is None:
-                        vmin = np.min(volume[:,:,z,:])
-                    if vmax is None:
-                        vmax = np.max(volume[:,:,z,:])
-                    axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
-                    axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
-                    axs[z,d].axis('off')
+        Nx,Ny,Nz,Nd=np.shape(volume)
+        plt.style.use('dark_background')
+        fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))
+        for d in range(Nd):
+            for z in range(Nz):
+                if vmin is None:
+                    vmin = np.min(volume[:,:,z,:])
+                if vmax is None:
+                    vmax = np.max(volume[:,:,z,:])
+                axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
+                axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
+                axs[z,d].axis('off')
         #plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
-        img_dir= os.path.join(os.path.dirname(path),f'{ID}')
+        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_Original')
         if plot:
             plt.savefig(img_dir)
         return fig,axs
@@ -1231,11 +1215,10 @@ class mapping:
     def _update(self):
         #For single slice
         if self.Nz == 1:
-            Nx, Ny, Nz,Nd = np.shape(self._data)
+            Nx, Ny, Nd = np.shape(self._data)
             self.shape=np.shape(self._data)
             self.Nx=Nx
             self.Ny=Ny
-            self.Nz=Nz
             self.Nd=Nd
         # For t1 t2 clinical maps
         elif len(np.shape(self._data))==3:
@@ -1299,7 +1282,7 @@ class mapping:
             path=self.path
         if ID== None:
             ID=self.ID
-        if data is None:
+        if data==None:
             data=self._data
         save_nii=os.path.join(os.path.dirname(path),f'{ID}_moco.nii.gz')
         nib.save(nib.Nifti1Image(data,affine=np.eye(4)),save_nii)
@@ -2053,8 +2036,8 @@ def imshow_old(volume):
 
 #Read the folder, and generate a volume with Nx,Ny,Nz,Nd
 #Return Volume, valueList
-#Matthew Modification Sep 8th
-def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True,sigma=75):
+#Matthew Modification Sep 8th: Use the 
+def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True):
     triggerList=[]
     seriesIDList = []
     seriesFolderList = []
@@ -2067,7 +2050,7 @@ def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True,s
             path=os.path.join(dirpath,x)
             if path.endswith('dcm') or path.endswith('DCM'):
                 if reject:
-                    if read_trigger(path,reject=reject,default=default,sigma=sigma)==False:
+                    if read_trigger(path,reject=reject,default=default)==False:
                         continue
                     else:
                         triggerList.append(read_trigger(path))
@@ -2108,60 +2091,31 @@ def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True,s
                 sliceLocsArray.append(abs(float(ds.SliceLocation)))
     sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
     Nz = len(sliceLocs)
+    Nd=int(NdNz/Nz)
     print(sliceLocs)
+    data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
+    j_dict={}
     if sortSlice:
-        Nd = int(NdNz/Nz)
-        data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-        j_dict={}
         for i in range(Nz):
             j_dict[str(i)]=0
         for ds in datasets:
             i=list(sliceLocs).index(abs(float(ds.SliceLocation)))
             data_final[:,:,i,j_dict[str(i)]] = ds.pixel_array
             j_dict[str(i)]+=1
-        print(triggerList)
-        return data_final,valueList,dcmFilesList
-    elif sortSlice==False:
-        print('Multiple sizes for 4D array')
-        j_dict={}
-        imageDict={}
-        valueDict={}
-        dcmFilesDict={}
-        for i in range(Nz):
-            imageDict[f'Slice{i}']=[]
-            valueDict[f'Slice{i}']=[]
-            dcmFilesDict[f'Slice{i}']=[]
-        for ind,ds in enumerate(datasets):
-            i=list(sliceLocs).index(abs(float(ds.SliceLocation)))
-            imageDict[f'Slice{i}'].append(ds.pixel_array)
-            #Add the valueList as well
-            tmpstr=ds[hex(int('0018',16)), hex(int('0082',16))].repval
-            valueDict[f'Slice{i}'].append(float(tmpstr.split('\'')[1]))
-            
-            
-            dcmFilesDict[f'Slice{i}'].append(dcmFilesList[ind])
-        print(triggerList)
-        return imageDict,valueDict,dcmFilesDict
-
+        Nd = int(NdNz/Nz)
+        data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
+    print(triggerList)
+    return data_final,valueList,dcmFilesList
 
 #Match the file and 
 def get_value(input_string):
-    ###Oct 23 2023: Add the read inversion parameters
-    try:
-        reader= sitk.ImageFileReader()
-        reader.SetFileName(input_string)
-        reader.ReadImageInformation()
-        seriesNumber=reader.GetMetaData('0018|0082')
-        seriesNumber = int(seriesNumber)
-        return seriesNumber
-    except:
-        pattern = r"(?i)(Ti|TE)[_]?(\d+)[ms]?"
-        match = re.search(pattern, input_string)
-        if match:
-            return int(match.group(2))
-        else:
-            # Return a very large value if 'Ti' or 'ti' is not found
-            return 'inf'
+    pattern = r"(?i)(Ti|TE)[_]?(\d+)[ms]?"
+    match = re.search(pattern, input_string)
+    if match:
+        return int(match.group(2))
+    else:
+        # Return a very large value if 'Ti' or 'ti' is not found
+        return 'inf'
 def read_seriers(filePath):
     reader = sitk.ImageFileReader()
     reader.SetFileName( filePath )
@@ -2171,7 +2125,7 @@ def read_seriers(filePath):
     seriesNumber = int(seriesNumber)
     return seriesNumber
 
-def read_trigger(filePath,reject=False,default=327,sigma=50):
+def read_trigger(filePath,reject=False,default=327,sigma=100):
     reader = sitk.ImageFileReader()
     reader.SetFileName( filePath )
     reader.LoadPrivateTagsOn()

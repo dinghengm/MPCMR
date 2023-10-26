@@ -3,32 +3,35 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
+import os
 #%%
-df=pd.read_csv('mapping_Sep_19_HHR.csv')
+dirname='C:\Research\MRI\MP_EPI'
+df=pd.read_csv(os.path.join(dirname,'mapping_Oct_23_HHR.csv'))
 #Read one only
 
 #CIRC_ID_list=['CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']    
-CIRC_ID_list=['CIRC_00291','CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']              
+#CIRC_ID_list=['CIRC_00291','CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']              
 #ID_list=['MP01','MP02','MP03','T1-MOLLI','T2-FLASH']
-ID_list=['MP01','MP02','MP03','T1-MOLLI','T1-MOLLI-FB','T2-FLASH','T2-FLASH-FB']
-keys=['CIRC_ID']
-value=[CIRC_ID_list[1]]
-df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+ID_list=['MP01','MP02','MP03','T1_MOLLI','T1_MOLLI_FB','T2_FLASH','T2_FLASH_FB']
 
+keys=['CIRC_ID']
+#value=[CIRC_ID_list[1]]
+#df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+df_CIRD=df
 #%%
 df_t1=df_CIRD.copy()
 searchfor_T1=[ID_list[i] for i in [0,3,4]]
-df_t1=df_t1[df_t1['ID'].str.contains('|'.join(searchfor_T1))]
+df_t1=df_t1[df_t1['ID'].str.contains('|'.join(searchfor_T1),case=False)]
 df_t2=df_CIRD.copy()
 searchfor_T2=[ID_list[i] for i in [1,5,6]]
-df_t2=df_t2[df_t2['ID'].str.contains('|'.join(searchfor_T2))]
+df_t2=df_t2[df_t2['ID'].str.contains('|'.join(searchfor_T2),case=False)]
 #%%
 df_t1=df_CIRD.copy()
 searchfor_T1=[ID_list[i] for i in [0,3]]
-df_t1=df_t1[df_t1['ID'].str.contains('|'.join(searchfor_T1))]
+df_t1=df_t1[df_t1['ID'].str.contains('|'.join(searchfor_T1),case=False)]
 df_t2=df_CIRD.copy()
 searchfor_T2=[ID_list[i] for i in [1,5]]
-df_t2=df_t2[df_t2['ID'].str.contains('|'.join(searchfor_T2))]
+df_t2=df_t2[df_t2['ID'].str.contains('|'.join(searchfor_T2),case=False)]
 #%%
 
 for seg in ['global','septal','lateral']:
@@ -242,13 +245,14 @@ for y_ind,seg in enumerate(['global']):
     y, h, col = max(map(max, all_data_T1))*1.1, max(map(max, all_data_T1))*0.05, 'k'
 
     axs[0].plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
-    #axs[0].plot([x1, x1, x3, x3], [y, y+2*h, y+2*h, y], lw=1.5, c=col)
-    #axs[0].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[0].plot([x1, x1, x3, x3], [y, y+2*h, y+2*h, y], lw=1.5, c=col)
+    axs[0].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
     axs[0].text((x1+x2)*.5, y+h, pvalue_asterisks[0], ha='center', va='bottom', color=col)
-    #axs[0].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
-    #axs[0].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
+    axs[0].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
+    axs[0].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
     print('T1:'+f'{pvalue_asterisks}')
     axs[0].set_title('Comparison of MP-EPI and T1-MOLLI')
+    #axs[0].set_ylim=(0,max(all_data_T1[0])*1.1)
     searchfor_slice=[f'{seg}',f'{seg}',f'{seg}']
     str_read=seg
     column=['ID']
@@ -279,13 +283,14 @@ for y_ind,seg in enumerate(['global']):
     y, h, col = y_position*1.1, y_position*0.05, 'k'
 
     axs[1].plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
-    #axs[1].plot([x1, x1, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[1].plot([x1, x1, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
     axs[1].set_ylabel('T2_value')
     axs[1].set_title('Comparison of MP-EPI and T2-FLASH')
-    #axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
     axs[1].text((x1+x2)*.5, y+h, pvalue_asterisks[0], ha='center', va='bottom', color=col)
-    #axs[1].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
-    #axs[1].text((x1+x3)*.5, y+h, f'p={p_values[2]:.2f}', ha='center', va='bottom', color=col)
+    axs[1].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
+    #axs[1].set_ylim=((0,max(all_data_T2[0])*1.1))
+    axs[1].text((x1+x3)*.5, y+h, f'p={p_values[2]:.2f}', ha='center', va='bottom', color=col)
     #axs[1].set_title(f'{seg}')
 
 plt.show()
