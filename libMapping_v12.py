@@ -1849,11 +1849,11 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     T1EstTmps=[]
     resTmps=[]
     #Make sure the data come in increasing TI-order
-    index = np.argsort(TIlist)
-    ydata=np.squeeze(data[index])
+    #index = np.argsort(TIlist)
+    #ydata=np.squeeze(data[index])
     #Initialize variables:
     minIndTmps=[]
-    minInd=np.argmin(ydata)
+    minInd=np.argmin(data)
     '''if minInd==0:
         minInd=1
     elif minInd==len(TIlist):
@@ -1864,37 +1864,43 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
             #before at the min
             minIndTmp=minInd
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
+            dataTmp=data*invertMatrix.T
             minIndTmps.append(minIndTmp)
         if ii==1:
             #at the min
             minIndTmp=minInd+1
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
+            dataTmp=data*invertMatrix.T
             minIndTmps.append(minIndTmp)
         if searchtype == 'lm':
-            T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
-            aEstTmps.append(ra_exp)
-            bEstTmps.append(rb_exp)
-            T1EstTmps.append(T1_exp)
-            #Get the chisquare
-            resTmps.append(res)
-        elif searchtype== 'grid':
             try: 
-                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
+                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,
+                ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
                 aEstTmps.append(ra_exp)
                 bEstTmps.append(rb_exp)
                 T1EstTmps.append(T1_exp)
                 #Get the chisquare
                 resTmps.append(res)
             except:
-                T1_exp,ra_exp,rb_exp,resTmps,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
+                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
+                aEstTmps.append(ra_exp)
+                bEstTmps.append(rb_exp)
+                T1EstTmps.append(T1_exp)
+                #Get the chisquare
+                resTmps.append(res)
+        elif searchtype== 'grid':
+            T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
+            aEstTmps.append(ra_exp)
+            bEstTmps.append(rb_exp)
+            T1EstTmps.append(T1_exp)
+            #Get the chisquare
+            resTmps.append(res)
     returnInd = np.argmin(np.array(resTmps))
     T1_final=T1EstTmps[returnInd]
     ra_final=aEstTmps[returnInd]
     rb_final=bEstTmps[returnInd]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-    return T1_final,ra_final,rb_final,resTmps,int(minIndTmps[returnInd])
+    return T1_final,ra_final,rb_final,resTmps[returnInd],int(minIndTmps[returnInd])
 def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000]):
 
     if len(np.shape(data))==3:

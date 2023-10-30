@@ -90,32 +90,6 @@ TI_read=M_noisy[:,TIlist]
 #How to fix the 
 
 #%%
-def sub_ir_fit_grid(data=None,TIlist=None,rabound=[1e-4,1e4],rbbound=[-10000,0],T1bound=[1,5000]):
-    ###From rdNlsPr from qmrlab
-    if np.size(data) != np.size(TIlist):
-        return
-    T1Start = T1bound[0]
-    T1Stop= T1bound[1]
-    #If Zoom it could be different, by default it's 1
-    TIarray=np.array(TIlist)
-    T1Vec = np.matrix(np.arange(T1Start, T1Stop+1, 1, dtype=np.float))
-    Nlen=np.size(TIarray)
-    the_exp = np.exp(-TIarray[:,np.newaxis] * 1/T1Vec)
-    exp_sum = 1. / Nlen * the_exp.sum(0).T
-    rho_norm_vec = np.sum(np.power(the_exp,2), 0).T - 1./Nlen*np.power(the_exp.sum(0).T,2)
-    data = np.matrix(data.ravel()).T
-    n = data.shape[0]
-    y_sum = data.sum()
-    rho_ty_vec = (data.T * the_exp).T - exp_sum * y_sum 
-    res=np.power(np.abs(rho_ty_vec), 2)/rho_norm_vec
-    maxInd=np.argmax(res)
-
-    T1_exp=T1Vec[0,maxInd]
-    rb_exp=rho_ty_vec[maxInd,0] / rho_norm_vec[maxInd,0]
-    ra_exp=1./Nlen*(y_sum - rb_exp*the_exp[:, maxInd].sum())
-    ydata_exp=ir_recovery(TIarray,T1_exp,ra_exp,rb_exp)
-    res=chisquareTest(data,ydata_exp)
-    return T1_exp,ra_exp,rb_exp,res,ydata_exp
 
 
 T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(TI_read[-1,:],TIlist)
@@ -135,7 +109,7 @@ plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
 plt.text(x=8000,y=0,s=f'T1={int(T1_exp)}\ny={ra_exp:.02f}+{rb_exp:.02f}*e^-t/{int(T1_exp)}')
 plt.grid('True')
 plt.show()
-
+plt.close()
 #%%
 def sub_ir_fit_grid_WLS(data=None,TIlist=None,rabound=[1e-4,1e4],rbbound=[-10000,0],T1bound=[1,5000],error='l1',Niter=1):
     T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=data,TIlist=TIlist,rabound=rabound,rbbound=rbbound,T1bound=T1bound)
@@ -172,7 +146,7 @@ plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
 plt.text(x=8000,y=0,s=f'T1={int(T1_exp)}\ny={ra_exp:.02f}+{rb_exp:.02f}*e^-t/{int(T1_exp)}')
 plt.grid('True')
 plt.show()
-
+plt.close()
 
 
 
@@ -193,6 +167,7 @@ plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
 plt.text(x=8000,y=0,s=f'T1={int(T1_final)}\ny={ra_final:.02f}+{rb_final:.02f}*e^-t/{int(T1_final)}')
 plt.grid('True')
 plt.show()
+plt.close()
 # %%
 T1_simulate=[1000,1100,1200,1300,1400,1500,1600]
 TIlist=[110,190,240,320,340,440,840,940,1240,1540,2140,2220,2740,2820,3140,4140,5140]
@@ -230,15 +205,171 @@ for SNR in SNR_list:
             if type =='WLS':
                 T1final_list_WLS.append(T1_final)
             #plt.savefig(os.path.join(savedir,f'Simulation T1={T1} SNR={SNR} WLS'))
-            plt.savefig(os.path.join(savedir,f'Simulation T1={T1} SNR={SNR} {type}'))
+            #plt.savefig(os.path.join(savedir,f'Simulation T1={T1} SNR={SNR} {type}'))
             plt.close()
     error=[min(i) for i in errors]
     plt.figure()
     bland_altman_plot(T1_simulate,T1final_list_OLS,Print_title=f'Simulation Error SNR={SNR}\n  OLS')
-    plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} OLS'))
+    #plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} OLS'))
     plt.close()
     plt.figure()
     bland_altman_plot(T1_simulate,T1final_list_WLS,Print_title=f'Simulation Error SNR={SNR}\n  WLS')
-    plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
+    #plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
     plt.close()
+#%%
+T1=1300
+TIlist1=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740]
+TIlist8000=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740,8000]
+SNR=30
+time,M=simulateT1(dT=dT,T=T,df=df,T1=T1,T2=T2,Tr=Tr,flip_angle=flip_angle)
+M_noisy=add_noise(abs(M),SNR=SNR,type='Gaussian')
+TI_read=M_noisy[:,TIlist1]
+TI_read_8000=np.append(TI_read,M_noisy[:,40,np.newaxis],axis=-1)
+T1_final_ols,ra_final_ols,rb_final_ols,_,returnInd=ir_fit(abs(TI_read[-1,:]),TIlist1,searchtype='lm',ra=1,rb=-2,T1=1200,Niter=2,type='OLS',error='l1')
+T1_final_wls,ra_final_wls,rb_final_wls,_,_=ir_fit(abs(TI_read[-1,:]),TIlist1,searchtype='lm',ra=1,rb=-2,T1=1200,Niter=2,type='WLS',error='l1')
+T1_final_grid,ra_final_grid,rb_final_grid,_,_=ir_fit(abs(TI_read[-1,:]),TIlist1,searchtype='grid',T1bound=[1,5000])
+x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
+ydata_exp_ols=abs(ir_recovery(x_plot,T1_final_ols,ra_final_ols,rb_final_ols))
+ydata_exp_wls=abs(ir_recovery(x_plot,T1_final_wls,ra_final_wls,rb_final_wls))
+ydata_exp_grid=abs(ir_recovery(x_plot,T1_final_grid,ra_final_grid,rb_final_grid))
+plt.scatter(np.array(TIlist1),TI_read[2,:])
+plt.legend(['Mz_Read'])
+plt.xlabel('Time (ms)')
+plt.ylabel('Magnetization')
+plt.title(f'Simulation T1={T1} SNR={SNR}')
+plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
+plt.text(x=8000,y=0,s=f'OLS:y={ra_final_ols:.02f}+{rb_final_ols:.02f}*e^-t/{int(T1_final_ols)}')
+plt.text(x=8000,y=-.25,s=f'WLS:y={ra_final_wls:.02f}+{rb_final_wls:.02f}*e^-t/{int(T1_final_wls)}')
+plt.text(x=8000,y=-0.5,s=f'Grid:y={ra_final_grid:.02f}+{rb_final_grid:.02f}*e^-t/{int(T1_final_grid)}')
+plt.grid('True')
+plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read[2,:][0:returnInd]),color='r')
+plt.plot(x_plot,ydata_exp_ols,label='OLS')
+plt.plot(x_plot,ydata_exp_wls,label='WLS')
+plt.plot(x_plot,ydata_exp_grid,label='Grid')
+plt.legend()
+plt.show()
+#%%
+TIlist8000=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740,8000]
+TI_read_8000=np.append(TI_read,M_noisy[:,40,np.newaxis],axis=-1)
+T1_final_ols,ra_final_ols,rb_final_ols,_,returnInd=ir_fit(abs(TI_read_8000[-1,:]),TIlist8000,searchtype='lm',ra=1,rb=-2,T1=1200,Niter=2,type='OLS',error='l1')
+T1_final_wls,ra_final_wls,rb_final_wls,_,_=ir_fit(abs(TI_read_8000[-1,:]),TIlist8000,searchtype='lm',ra=1,rb=-2,T1=1200,Niter=2,type='WLS',error='l1')
+T1_final_grid,ra_final_grid,rb_final_grid,_,_=ir_fit(abs(TI_read_8000[-1,:]),TIlist8000,searchtype='grid',T1bound=[1,5000])
+x_plot=np.arange(start=1,stop=TIlist8000[-1],step=1)
+ydata_exp_ols=abs(ir_recovery(x_plot,T1_final_ols,ra_final_ols,rb_final_ols))
+ydata_exp_wls=abs(ir_recovery(x_plot,T1_final_wls,ra_final_wls,rb_final_wls))
+ydata_exp_grid=abs(ir_recovery(x_plot,T1_final_grid,ra_final_grid,rb_final_grid))
+plt.scatter(np.array(TIlist8000),TI_read_8000[2,:])
+plt.legend(['Mz_Read'])
+plt.xlabel('Time (ms)')
+plt.ylabel('Magnetization')
+plt.title(f'Simulation T1={T1} SNR={SNR}')
+plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
+plt.text(x=8000,y=0,s=f'OLS:y={ra_final_ols:.02f}+{rb_final_ols:.02f}*e^-t/{int(T1_final_ols)}')
+plt.text(x=8000,y=-.25,s=f'WLS:y={ra_final_wls:.02f}+{rb_final_wls:.02f}*e^-t/{int(T1_final_wls)}')
+plt.text(x=8000,y=-0.5,s=f'Grid:y={ra_final_grid:.02f}+{rb_final_grid:.02f}*e^-t/{int(T1_final_grid)}')
+plt.grid('True')
+plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read_8000[2,:][0:returnInd]),color='r')
+plt.plot(x_plot,ydata_exp_ols,label='OLS')
+plt.plot(x_plot,ydata_exp_wls,label='WLS')
+plt.plot(x_plot,ydata_exp_grid,label='Grid')
+plt.legend()
+plt.show()
+# %%
+#Simulation:
+#First, WLS + 8000 to get the T1
+T1_simulate=np.arange(1000,1700,5)
+TIlist1=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740]
+TIlist8000=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740,8000]
+SNR=20
+errors=[]
+T1final_list_WLS=[]
+T1final_list_OLS=[]
+T1final_list_Ori=[]
+T1final_list_Grid=[]
+T1final_list_WLS_8000=[]
+T1final_list_OLS_8000=[]
+T1final_list_Grid_8000=[]
+for _ in range(1):
+    for T1 in T1_simulate:
+        time,M=simulateT1(dT=dT,T=T,df=df,T1=T1,T2=T2,Tr=Tr,flip_angle=flip_angle)
+        M_noisy=add_noise(abs(M),SNR=SNR,type='Gaussian')
+        TI_read=M_noisy[:,TIlist1]
+        TI_read_8000=np.append(TI_read,M_noisy[:,40,np.newaxis],axis=-1)
+        T1final_list_Ori.append(T1)
+        print('Simulation to T1',T1)
+        for searchtype in ['lm','grid']:
+            if searchtype=='lm':
+                for type in ['OLS','WLS']:
+                    T1_final,ra_final,rb_final,res,returnInd=ir_fit(abs(TI_read[-1,:]),TIlist1,type=type,ra=1,rb=-2,T1=1200,Niter=2,searchtype=searchtype,error='l1')
+
+                    if type =='OLS':
+                        T1final_list_OLS.append(T1_final)
+                    if type =='WLS':
+                        T1final_list_WLS.append(T1_final)
+            elif searchtype=='grid':
+                T1_final,ra_final,rb_final,res,returnInd=ir_fit(abs(TI_read[-1,:]),TIlist1,type=type,searchtype=searchtype,T1bound=[1,5000])
+                T1final_list_Grid.append(T1_final)
+        for searchtype in ['lm','grid']:
+            if searchtype=='lm':
+                for type in ['OLS','WLS']:
+                    T1_final,ra_final,rb_final,res,returnInd=ir_fit(abs(TI_read_8000[-1,:]),TIlist8000,type=type,Niter=2,searchtype=searchtype,error='l1')
+
+                    if type =='OLS':
+                        T1final_list_OLS_8000.append(T1_final)
+                    if type =='WLS':
+                        T1final_list_WLS_8000.append(T1_final)
+            elif searchtype=='grid':
+                T1_final,ra_final,rb_final,res,returnInd=ir_fit(abs(TI_read_8000[-1,:]),TIlist8000,type=type,searchtype=searchtype,T1bound=[1,5000])
+                T1final_list_Grid_8000.append(T1_final)
+savedict={}
+savedict['T1final_list_WLS']=T1final_list_WLS
+savedict['T1final_list_OLS']=T1final_list_OLS
+savedict['T1final_list_Ori']=T1final_list_Ori
+savedict['T1final_list_Grid']=T1final_list_Grid
+savedict['T1final_list_WLS_8000']=T1final_list_WLS_8000
+savedict['T1final_list_OLS_8000']=T1final_list_OLS_8000
+savedict['T1final_list_Grid_8000']=T1final_list_Grid_8000
+import pickle 
+with open(f'saved_dictionary_{SNR}.pkl', 'wb') as f:
+    pickle.dump(savedict, f)
+# %%
+plt.plot(T1final_list_Ori,T1final_list_WLS,label='WLS')
+plt.plot(T1final_list_Ori,T1final_list_OLS,label='OLS')
+plt.plot(T1final_list_Ori,T1final_list_Grid,label='Grid')
+plt.legend()
+plt.show()
+plt.close()
+# %%
+plt.plot(T1final_list_Ori,T1final_list_WLS_8000,label='WLS_8000')
+plt.plot(T1final_list_Ori,T1final_list_OLS_8000,label='OLS_8000')
+plt.plot(T1final_list_Ori,T1final_list_Grid_8000,label='Grid_8000')
+plt.legend()
+plt.show()
+plt.close()
+# %%
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_OLS_8000,Print_title=f'Simulation Error SNR={SNR}\n  OLS_8000')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} OLS'))
+#plt.close()
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_WLS_8000,Print_title=f'Simulation Error SNR={SNR}\n  WLS_8000')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
+#plt.close()
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_Grid_8000,Print_title=f'Simulation Error SNR={SNR}\n  Grid_8000')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
+#plt.close()
+# %%
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_OLS,Print_title=f'Simulation Error SNR={SNR}\n  OLS')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} OLS'))
+#plt.close()
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_WLS,Print_title=f'Simulation Error SNR={SNR}\n  WLS')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
+#plt.close()
+plt.figure()
+bland_altman_plot(T1final_list_Ori,T1final_list_Grid,Print_title=f'Simulation Error SNR={SNR}\n  Grid')
+#plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
+#plt.close()
 # %%
