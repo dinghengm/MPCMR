@@ -149,6 +149,124 @@ for obj in [MP01_0,MP01_1,MP01_2]:
     obj._save_nib()
     list=[i+40 for i in obj.valueList]
     print(f'{obj.ID}:{list}')
+#%%
+#Save the map and show
+crange=[0,3000]
+cmap='magma'
+path=os.path.dirname(dicomPath)
+map_data=sio.loadmat(os.path.join(path,'Slice0_nonduplicate_real.mat'))
+
+map_data=map_data['T1']
+MP01_0._map= np.expand_dims(map_data,axis=-1)
+MP01_0.crange=crange
+MP01_0.cmap=cmap
+map_data=sio.loadmat(os.path.join(path,'Slice1_nonduplicate_real.mat'))
+map_data=map_data['T1']
+MP01_1._map= np.expand_dims(map_data,axis=-1)
+map_data=sio.loadmat(os.path.join(path,'Slice2_nonduplicate_real.mat'))
+map_data=map_data['T1']
+MP01_2._map= np.expand_dims(map_data,axis=-1)
+#%%
+#Imshow
+num_slice=3
+figsize = (3.4*num_slice, 3)
+plot=True
+fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+for sl,obj in enumerate([MP01_0,MP01_1,MP01_2]):
+    axes[sl].set_axis_off()
+    im = axes[sl].imshow(np.flip(obj._map,axis=0), vmin=crange[0],vmax=crange[1], cmap=cmap)
+cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
+img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_nonduplicate_real')
+if plot:
+    plt.savefig(img_dir)
+plt.show()
+#%%
+#DRAW ROI
+MP01_0.go_segment_LV(image_type="map",crange=crange)
+MP01_0.save()
+# look at stats
+MP01_0.show_calc_stats_LV()
+MP01_1.go_segment_LV(image_type="map",crange=crange)
+MP01_1.save()
+# look at stats
+MP01_1.show_calc_stats_LV()
+MP01_2.go_segment_LV(image_type="map",crange=crange)
+MP01_2.save()
+# look at stats
+MP01_2.show_calc_stats_LV()
+
+fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True,squeeze=True) 
+for sl,obj in enumerate([MP01_0,MP01_1,MP01_2]):
+    alpha = obj.mask_lv[..., 0] * 1.0
+    base_im = obj._data[:, :, 0, 0]
+    brightness = 0.8
+    axes[sl].set_axis_off()
+    axes[sl].imshow(base_im, cmap="gray", vmax=np.max(base_im)*brightness)
+    im = axes[sl].imshow(obj._map[...], alpha=alpha, vmin=crange[0],vmax=crange[1], cmap=cmap)
+cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
+mg_dir= os.path.join(os.path.dirname(dirpath),f'{obj.CIRC_ID}_nonduplicate_real_overlay')
+
+plt.savefig(img_dir)
+plt.show()  
+#%%
+# TEMP MASK
+mask0=MP01_0.mask_lv
+mask1=MP01_1.mask_lv
+mask2=MP01_2.mask_lv
+#%%
+#Save the map and show
+crange=[0,3000]
+cmap='magma'
+path=os.path.dirname(dicomPath)
+map_data=sio.loadmat(os.path.join(path,'Slice0_nonduplicate_make.mat'))
+
+map_data=map_data['T1']
+MP01_0._map= np.expand_dims(map_data,axis=-1)
+MP01_0.crange=crange
+MP01_0.cmap=cmap
+map_data=sio.loadmat(os.path.join(path,'Slice1_nonduplicate_make.mat'))
+map_data=map_data['T1']
+MP01_1._map= np.expand_dims(map_data,axis=-1)
+map_data=sio.loadmat(os.path.join(path,'Slice2_nonduplicate_make.mat'))
+map_data=map_data['T1']
+MP01_2._map= np.expand_dims(map_data,axis=-1)
+#%%
+#Imshow
+num_slice=3
+figsize = (3.4*num_slice, 3)
+plot=True
+fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+for sl,obj in enumerate([MP01_0,MP01_1,MP01_2]):
+    axes[sl].set_axis_off()
+    im = axes[sl].imshow(np.flip(obj._map,axis=0), vmin=crange[0],vmax=crange[1], cmap=cmap)
+cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
+img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_nonduplicate_make')
+if plot:
+    plt.savefig(img_dir)
+plt.show()
+#%%
+#DRAW ROI
+MP01_0.mask_lv=mask0
+MP01_1.mask_lv=mask0
+MP01_2.mask_lv=mask0
+MP01_0.show_calc_stats_LV()
+MP01_1.show_calc_stats_LV()
+MP01_2.show_calc_stats_LV()
+
+fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True,squeeze=True) 
+for sl,obj in enumerate([MP01_0,MP01_1,MP01_2]):
+    alpha = obj.mask_lv[..., 0] * 1.0
+    base_im = obj._data[:, :, 0, 0]
+    brightness = 0.8
+    axes[sl].set_axis_off()
+    axes[sl].imshow(base_im, cmap="gray", vmax=np.max(base_im)*brightness)
+    im = axes[sl].imshow(obj._map[...], alpha=alpha, vmin=crange[0],vmax=crange[1], cmap=cmap)
+cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
+mg_dir= os.path.join(os.path.dirname(dirpath),f'{obj.CIRC_ID}_nonduplicate_make_overlay')
+
+plt.savefig(img_dir)
+plt.show()  
+        
 # %%
 ###########################################################################
 ##########################################################################
@@ -256,6 +374,38 @@ for ind,obj in enumerate([MP01_0,MP01_1,MP01_2]):
     obj._save_nib(ID=f'{obj.ID}_make')
     list=[i+40 for i in obj.valueList]
     print(f'{obj.ID}:{list}')
+#%%
+#Save the map and show
+crange=[0,3000]
+cmap='magma'
+path=os.path.dirname(dicomPath)
+map_data=sio.loadmat(os.path.join(path,'Slice0.mat'))
+
+map_data=map_data['T1']
+MP01_0._map= np.expand_dims(map_data,axis=-1)
+MP01_0.crange=crange
+MP01_0.cmap=cmap
+map_data=sio.loadmat(os.path.join(path,'Slice1.mat'))
+map_data=map_data['T1']
+MP01_1._map= map_data
+map_data=sio.loadmat(os.path.join(path,'Slice2.mat'))
+map_data=map_data['T1']
+MP01_2._map= map_data
+#%%
+#Imshow
+num_slice=3
+figsize = (3.4*num_slice, 3)
+plot=True
+fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+for sl,obj in enumerate([MP01_0,MP01_1,MP01_2]):
+    axes[sl].set_axis_off()
+    im = axes[sl].imshow(np.flip(obj._map,axis=0), vmin=crange[0],vmax=crange[1], cmap=cmap)
+cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
+img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{ID}')
+if plot:
+    plt.savefig(img_dir)
+plt.show()
+
 # %%
 ###########################################################################
 ##########################################################################

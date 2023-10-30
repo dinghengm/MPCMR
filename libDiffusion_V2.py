@@ -152,7 +152,7 @@ class diffusion:
             self.dcm_list = datasets
             if self.ID == None:
                 self.ID = self.dcm_list[0].PatientID
-            '''
+            
             if bval == []:
                 self.bval = np.concatenate((np.zeros(1),
                                         np.ones(Nd)*500)) #default b = 500
@@ -176,7 +176,7 @@ class diffusion:
                 #        temp = np.copy(self.bvec[:,0])
                 #        self.bvec[:,0] = self.bvec[:,1]
                 #        self.bvec[:,1] = temp
-            '''
+            
 
             
             self.mask_endo = []
@@ -845,12 +845,19 @@ class diffusion:
             data[:,:,i] = ds.pixel_array
             i += 1
             sliceLocsArray.append(float(ds.SliceLocation))
-            diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
-            diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
+            try:
+
+                diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
+                diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
+            except:
+                diffGrad_str_array=np.array([1,0,0])
             diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
+            
             #print(datasets[0][hex(int('0019',16)), hex(int('100e',16))])
             diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
+
+
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
 
         # check mosaic

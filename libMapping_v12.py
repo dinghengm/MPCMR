@@ -1052,7 +1052,8 @@ class mapping:
             ID=self.ID
         num_slice=self.Nz
         figsize = (num_slice*3, 3)
-        fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+        fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True,squeeze=False)
+        
         for sl in range(num_slice):
             alpha = self.mask_lv[..., sl] * 1.0
             base_im = self._data[:, :, sl, 0]
@@ -1774,29 +1775,89 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
 #TODO      
 #Make a weighted least square fit
 #Equation: abs(ra+rb *exp(-TI/T1))
-def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2):
+def ir_recovery(tVec,T1,ra,rb):
+    #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
+    tVec=np.array(tVec)
+    #Return T1Vec,ra,rb
+    return ra + rb* np.exp(-tVec/T1)
+def chisquareTest(obs,exp):
+    return np.sum(((obs-exp)**2/exp))
+def sub_ir_fit_lm(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2):
 
-    def ir_recovery(tVec,T1,ra,rb):
-        #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
-        tVec=np.array(tVec)
-        #Return T1Vec,ra,rb
-        return ra + rb* np.exp(-tVec/T1)
-    def chisquareTest(obs,exp):
-        return np.sum(((obs-exp)**2/exp))
-    #Make sure the data come in increasing TI-order
-    index = np.argsort(TIlist)
-    ydata=np.squeeze(data[index])
-    #Initialize variables:
+    try:
+        params_OLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1,ra,rb],maxfev=5000)
+        T1_exp,ra_exp,rb_exp=params_OLS
+        ydata_exp_OLS=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        if type=='WLS':
+            for _ in range(Niter):
+                ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+                if error=='l1':
+                    simga_square=abs(ydata_exp-data)
+                elif error=='l2':
+                    simga_square=abs(ydata_exp-data)**2
+                weights = 1 / (simga_square)
+                params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1,ra,rb],maxfev=5000,sigma=weights,absolute_sigma=True)
+                #print(weights)
+                T1_exp,ra_exp,rb_exp=params_WLS
+            ###If the error is higher than OLS use OLS
+            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+            #if chisquareTest(dataTmp,ydata_exp_OLS)<chisquareTest(dataTmp,ydata_exp):
+            #    T1_exp,ra_exp,rb_exp=params_OLS
+        elif type=='OLS':
+            T1_exp,ra_exp,rb_exp=params_OLS
+            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        #Get the chisquare
+        res=chisquareTest(data,ydata_exp)
+    except:
+        ydata_exp=ir_recovery(TIlist,T1,ra,rb)
+        T1_exp=T1
+        ra_exp=ra
+        rb_exp=rb
+    return T1_exp,ra_exp,rb_exp,res,ydata_exp
+
+def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
+    ###From rdNlsPr from qmrlab
+    if np.size(data) != np.size(TIlist):
+        return
+    T1Start = T1bound[0]
+    T1Stop= T1bound[1]
+    #If Zoom it could be different, by default it's 1
+    TIarray=np.array(TIlist)
+    T1Vec = np.matrix(np.arange(T1Start, T1Stop+1, 1, dtype=np.float))
+    Nlen=np.size(TIarray)
+    the_exp = np.exp(-TIarray[:,np.newaxis] * 1/T1Vec)
+    exp_sum = 1. / Nlen * the_exp.sum(0).T
+    rho_norm_vec = np.sum(np.power(the_exp,2), 0).T - 1./Nlen*np.power(the_exp.sum(0).T,2)
+    data = np.matrix(data.ravel()).T
+    n = data.shape[0]
+    y_sum = data.sum()
+    rho_ty_vec = (data.T * the_exp).T - exp_sum * y_sum 
+    res=np.power(np.abs(rho_ty_vec), 2)/rho_norm_vec
+    maxInd=np.argmax(res)
+
+    T1_exp=T1Vec[0,maxInd]
+    rb_exp=rho_ty_vec[maxInd,0] / rho_norm_vec[maxInd,0]
+    ra_exp=1./Nlen*(y_sum - rb_exp*the_exp[:, maxInd].sum())
+    ydata_exp=ir_recovery(TIarray,T1_exp,ra_exp,rb_exp)
+    res=chisquareTest(data,ydata_exp)
+    return T1_exp,ra_exp,rb_exp,res,ydata_exp
+
+def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2,searchtype='grid',
+            T1bound=[1,5000]):
     aEstTmps=[]
     bEstTmps=[]
     T1EstTmps=[]
     resTmps=[]
+    #Make sure the data come in increasing TI-order
+    index = np.argsort(TIlist)
+    ydata=np.squeeze(data[index])
+    #Initialize variables:
     minIndTmps=[]
     minInd=np.argmin(ydata)
-    if minInd==0:
+    '''if minInd==0:
         minInd=1
     elif minInd==len(TIlist):
-        minInd=len(TIlist)-1
+        minInd=len(TIlist)-1'''
     #Invert the data to before,at,after the min
     for ii in range(2):
         if ii==0:
@@ -1811,57 +1872,31 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
             dataTmp=ydata*invertMatrix.T
             minIndTmps.append(minIndTmp)
-        if ii==2:
-            #after the min
-            minIndTmp=minInd+2
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=ydata*invertMatrix.T
-            minIndTmps.append(minIndTmp)
-        try:
-            params_OLS,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000)
-            T1_exp,ra_exp,rb_exp=params_OLS
-            ydata_exp_OLS=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-            if type=='WLS':
-                for _ in range(Niter):
-                    ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-                    if error=='l1':
-                        simga_square=abs(ydata_exp-dataTmp)
-                    elif error=='l2':
-                        simga_square=abs(ydata_exp-dataTmp)**2
-                    weights = 1 / (simga_square)
-                    params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,dataTmp,method='lm',p0=[T1,ra,rb],maxfev=5000,sigma=weights,absolute_sigma=True)
-                    #print(weights)
-                    T1_exp,ra_exp,rb_exp=params_WLS
-                ###If the error is higher than OLS use OLS
-                ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-                #if chisquareTest(dataTmp,ydata_exp_OLS)<chisquareTest(dataTmp,ydata_exp):
-                #    T1_exp,ra_exp,rb_exp=params_OLS
-            elif type=='OLS':
-                T1_exp,ra_exp,rb_exp=params_OLS
-                ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        if searchtype == 'lm':
+            T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
             aEstTmps.append(ra_exp)
             bEstTmps.append(rb_exp)
             T1EstTmps.append(T1_exp)
             #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
-        except:
-            ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-            aEstTmps.append(ra)
-            bEstTmps.append(rb)
-            T1EstTmps.append(T1)
-            #Get the chisquare
-            resTmps.append(chisquareTest(dataTmp,ydata_exp))
+            resTmps.append(res)
+        elif searchtype== 'grid':
+            try: 
+                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
+                aEstTmps.append(ra_exp)
+                bEstTmps.append(rb_exp)
+                T1EstTmps.append(T1_exp)
+                #Get the chisquare
+                resTmps.append(res)
+            except:
+                T1_exp,ra_exp,rb_exp,resTmps,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
     returnInd = np.argmin(np.array(resTmps))
     T1_final=T1EstTmps[returnInd]
     ra_final=aEstTmps[returnInd]
     rb_final=bEstTmps[returnInd]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
     return T1_final,ra_final,rb_final,resTmps,int(minIndTmps[returnInd])
-def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False,type='WLS',Niter=2,error='l2'):
-    #Parallel is not able to use not
-    from multiprocessing import Pool
-    from functools import partial
-    #Go through for all slice:
+def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000]):
+
     if len(np.shape(data))==3:
         Nx,Ny,Nd=np.shape(data)
         Nz=1
@@ -1880,28 +1915,11 @@ def go_ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,parallel=False,type='
     #Calculate all slices
     dataTmp=np.copy(data)
     for z in range(Nz):
-        if parallel:
-            if Nz ==1:
-                dataTmp=np.reshape(dataTmp,(NxNy))
-                finalMap=np.reshape(finalMap,(NxNy))
-            else:
-                dataTmp=np.reshape(dataTmp,(NxNy,Nz,Nd))
-                tempMap=np.reshape(finalMap,(NxNy,Nz))
-                tempRa=np.reshape(finalRa,(NxNy,Nz))
-                tempRb=np.reshape(finalRb,(NxNy,Nz))
-                tempRes=np.reshape(finalRes,(NxNy,Nz))
-
-            with Pool(6) as pool:
-                temp=pool.map(partial(ir_fit,TIlist=TIlist,ra=ra,rb=-rb,T1=T1), [dataTmp[i,z,:] for i in range(NxNy)])
-
-            finalMap[:,:,z]=np.reshape(np.array(temp[0]),(Nx,Ny))
-            finalRa[:,:,z]=np.reshape(np.array(temp[1]),(Nx,Ny))
-            finalRb[:,:,z]=np.reshape(np.array(temp[2]),(Nx,Ny))
-            finalRes[:,:,z]=np.reshape(np.array(temp[3]),(Nx,Ny))
-        else:
-            for x in range(Nx):
-                for y in range(Ny):
-                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
+        
+        for x in range(Nx):
+            for y in range(Ny):
+                finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
+            T1bound=T1bound)
     return finalMap,finalRa,finalRb,finalRes
 
 #########################################################################################
