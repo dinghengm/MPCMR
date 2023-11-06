@@ -124,7 +124,7 @@ img_dir= os.path.join(dirpath,f'MP02_SE')
 plt.savefig(img_dir)
 
 #%%
-
+#%%__+++add the segmentation
 MP01.go_segment_LV(reject=None, image_type="b0")
 # save
 MP01.save()
