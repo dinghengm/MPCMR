@@ -53,31 +53,36 @@ for ind,ds in enumerate(datasets):
 # %%
 #Maybe I assume 1 b0, 72 b500, and it's 12 Direction * 6
 #path=r'C:\Research\MRI\Ungated\CIRC_00325\MR_ep2d_diff_moco2asym_ungated_b500_TE59_32ave'
-dti = diffusion(data=data,bval=diffBValArray,bvec=np.array(diffGradArray),ID='UCSF_7020_05162023',datasets=datasets,bFilenameSorted=False)
+
+datatmp=np.transpose(data,(1,2,0,3))
+bvec=np.copy(np.array(diffGradArray))
+for i in range(73):
+    bvec[i,:][[1,2,0]]=np.array(diffGradArray)[i,:]
+dti_20 = diffusion(data=datatmp,bval=diffBValArray,bvec=np.array(diffGradArray),ID='UCSF_7020_05162023',datasets=datasets,bFilenameSorted=False)
 
 # %% ####################################################################################
 # Calculate DTI Params ##################################################################
 #########################################################################################
 %matplotlib qt
-dti.CoM = [None]*dti.Nz
-for i in range(dti.Nz):
-    dti.CoM[i] = np.array((35,40))
+dti_20.CoM = [None]*dti_20.Nz
+for i in range(dti_20.Nz):
+    dti_20.CoM[i] = np.array((35,40))
 #  Calculate DTI 
-dti.go_calc_DTI(bCalcHA=True,bFastOLS=True,bNumba=False,bclickCOM=False)
+dti_20.go_calc_DTI(bCalcHA=True,bFastOLS=True,bNumba=False,bclickCOM=False)
 
 #%%
 %matplotlib qt
 
 import plotly.express as px
 # custom imshow to show the diffusion parameters
-col_shape = (dti.Nx,dti.Ny*dti.Nz)
-md = dti.md #.reshape(col_shape,order='F')
-fa = dti.fa #.reshape(col_shape,order='F')
-ha = dti.ha #.reshape(col_shape,order='F')
+col_shape = (dti_20.Nx,dti_20.Ny*dti_20.Nz)
+md = dti_20.md #.reshape(col_shape,order='F')
+fa = np.transpose(dti_20.fa,(2,0,1)) #.reshape(col_shape,order='F')
+ha = dti_20.ha #.reshape(col_shape,order='F')
 
 #fa_stack = np.dstack((fa,)*3)
 #colFA = self.pvec.reshape((self.Nx,self.Ny*self.Nz,3),order='f')/np.max(self.pvec[:])*255*fa_stack
-colFA = dti.colFA #.reshape((self.Nx,self.Ny*self.Nz,3),order='f')*255
+colFA = dti_20.colFA #.reshape((self.Nx,self.Ny*self.Nz,3),order='f')*255
 # swap x and y if phase encode is LR for display
 temp = np.copy(colFA[...,0])
 colFA[...,0] = colFA[...,1]
@@ -103,6 +108,7 @@ fig1.layout.height = 10000
 fig2.layout.height = 10000
 fig3.layout.height = 10000
 fig4.layout.height = 10000
+#%%
 #md
 fig1.show()
 

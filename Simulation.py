@@ -93,44 +93,7 @@ TI_read=M_noisy[:,TIlist]
 
 
 T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(TI_read[-1,:],TIlist)
-
-
-x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
-ydata_exp=abs(ir_recovery(x_plot,T1_exp,ra_exp,rb_exp))
-plt.plot(x_plot,ydata_exp)
-
-#plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read[2,:][0:returnInd]),color='r')
-plt.scatter(np.array(TIlist),TI_read[2,:])
-plt.legend(['Mz_Read'])
-plt.xlabel('Time (ms)')
-plt.ylabel('Magnetization')
-plt.title(f'Simulation T1={T1} SNR={SNR}')
-plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
-plt.text(x=8000,y=0,s=f'T1={int(T1_exp)}\ny={ra_exp:.02f}+{rb_exp:.02f}*e^-t/{int(T1_exp)}')
-plt.grid('True')
-plt.show()
-plt.close()
-#%%
-def sub_ir_fit_grid_WLS(data=None,TIlist=None,rabound=[1e-4,1e4],rbbound=[-10000,0],T1bound=[1,5000],error='l1',Niter=1):
-    T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=data,TIlist=TIlist,rabound=rabound,rbbound=rbbound,T1bound=T1bound)
-    for _ in range(Niter):
-        if error=='l1':
-            simga_square=abs(ydata_exp-data)
-        elif error=='l2':
-            simga_square=abs(ydata_exp-data)**2
-        weights = 1 / (simga_square)
-        #data_tmp=data*weights
-        #T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=data_tmp,TIlist=TIlist,rabound=rabound,rbbound=rbbound,T1bound=T1bound)
-        params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1_exp,ra_exp,rb_exp],maxfev=5000,sigma=weights,absolute_sigma=True)
-        #print(weights)
-        T1_exp,ra_exp,rb_exp=params_WLS
-    ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-    res=chisquareTest(data,ydata_exp)
-    return T1_exp,ra_exp,rb_exp,res,ydata_exp
-
-
-T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid_WLS(TI_read[-1,:],TIlist)
-
+print(res)
 
 x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
 ydata_exp=abs(ir_recovery(x_plot,T1_exp,ra_exp,rb_exp))
@@ -147,7 +110,6 @@ plt.text(x=8000,y=0,s=f'T1={int(T1_exp)}\ny={ra_exp:.02f}+{rb_exp:.02f}*e^-t/{in
 plt.grid('True')
 plt.show()
 plt.close()
-
 
 
 #%%
@@ -169,22 +131,25 @@ plt.grid('True')
 plt.show()
 plt.close()
 # %%
-T1_simulate=[1000,1100,1200,1300,1400,1500,1600]
+T1_simulate=[800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800]
+T1_simulate=[1400,1500,1600,1700,1800]
+
 TIlist=[110,190,240,320,340,440,840,940,1240,1540,2140,2220,2740,2820,3140,4140,5140]
 
-SNR_list=[20,30,40,50]
+SNR_list=[20]
 savedir=r'C:\Research\MRI\MP_EPI\Simulation\l1Nrom'
 
 for SNR in SNR_list:
     errors=[]
     T1final_list_WLS=[]
     T1final_list_OLS=[]
+    T1final_list_Grid=[]
     for T1 in T1_simulate:
         time,M=simulateT1(dT=dT,T=T,df=df,T1=T1,T2=T2,Tr=Tr,flip_angle=flip_angle)
         M_noisy=add_noise(abs(M),SNR=SNR,type='Gaussian')
         TI_read=M_noisy[:,TIlist]
         for type in ['OLS','WLS']:
-            T1_final,ra_final,rb_final,resTmps,returnInd=ir_fit(TI_read[-1,:],TIlist,type=type,Niter=2,error='l1')
+            T1_final,ra_final,rb_final,resTmps,returnInd=ir_fit(TI_read[-1,:],TIlist,searchtype='lm',type=type,Niter=2,error='l1',invertPoint=4)
             x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
             ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
             plt.figure()
@@ -199,28 +164,50 @@ for SNR in SNR_list:
             plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
             plt.text(x=8000,y=0,s=f'{type}\nT1={int(T1_final)}\ny={ra_final:.02f}+{rb_final:.02f}*e^-t/{int(T1_final)}')
             plt.grid('True')
-            errors.append(resTmps)
+            print(resTmps)
+            plt.show()
             if type =='OLS':
                 T1final_list_OLS.append(T1_final)
             if type =='WLS':
                 T1final_list_WLS.append(T1_final)
             #plt.savefig(os.path.join(savedir,f'Simulation T1={T1} SNR={SNR} WLS'))
             #plt.savefig(os.path.join(savedir,f'Simulation T1={T1} SNR={SNR} {type}'))
-            plt.close()
-    error=[min(i) for i in errors]
+            #plt.close()
+        T1_final,ra_final,rb_final,res,returnInd=ir_fit(abs(TI_read[-1,:]),TIlist,searchtype='grid',T1bound=[1,5000],invertPoint=4)
+        x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
+        ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
+        
+        plt.figure()
+        plt.plot(x_plot,ydata_exp)
+        plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read[2,:][0:returnInd]),color='r')
+        plt.scatter(np.array(TIlist),np.abs(TI_read[2,:]))
+        plt.legend(['Mz_Read'])
+        plt.xlabel('Time (ms)')
+        plt.ylabel('Magnetization')
+        plt.title(f'Simulation T1={T1} SNR={SNR}\n  Grid')
+        plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
+        plt.text(x=8000,y=0,s=f'{type}\nT1={int(T1_final)}\ny={ra_final:.02f}+{rb_final:.02f}*e^-t/{int(T1_final)}')
+        plt.grid('True')
+        T1final_list_Grid.append(T1_final)
+        print(resTmps)
+        plt.show()
+    #error=[min(i) for i in errors]
     plt.figure()
     bland_altman_plot(T1_simulate,T1final_list_OLS,Print_title=f'Simulation Error SNR={SNR}\n  OLS')
     #plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} OLS'))
-    plt.close()
+    #plt.close()
     plt.figure()
     bland_altman_plot(T1_simulate,T1final_list_WLS,Print_title=f'Simulation Error SNR={SNR}\n  WLS')
+    plt.figure()
+    bland_altman_plot(T1_simulate,T1final_list_Grid,Print_title=f'Simulation Error SNR={SNR}\n  Grid')
     #plt.savefig(os.path.join(savedir,f'Simulation Error SNR={SNR} WLS'))
-    plt.close()
+    #plt.close()
+
 #%%
 T1=1300
 TIlist1=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740]
 TIlist8000=[110,190,240,320,340,840,940,1240,1540,2140,2220,2740,8000]
-SNR=30
+SNR=20
 time,M=simulateT1(dT=dT,T=T,df=df,T1=T1,T2=T2,Tr=Tr,flip_angle=flip_angle)
 M_noisy=add_noise(abs(M),SNR=SNR,type='Gaussian')
 TI_read=M_noisy[:,TIlist1]

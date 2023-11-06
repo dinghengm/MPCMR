@@ -40,7 +40,7 @@ except:
 
 #from libMapping import mapping,readFolder
 
-from libMapping_v11 import *
+from libMapping_v12 import *
 %matplotlib qt
 
 #%%

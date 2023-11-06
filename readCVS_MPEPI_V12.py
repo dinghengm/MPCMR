@@ -6,18 +6,19 @@ import matplotlib.pyplot as plt
 import os
 #%%
 dirname='C:\Research\MRI\MP_EPI'
-df=pd.read_csv(os.path.join(dirname,'mapping_Oct_23_HHR.csv'))
+df=pd.read_csv(os.path.join(dirname,'mappingISMRMNov5_HR.csv'))
 #Read one only
 
-#CIRC_ID_list=['CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']    
+#CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00393','CIRC_00407']    
+CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405']    
 #CIRC_ID_list=['CIRC_00291','CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']              
 #ID_list=['MP01','MP02','MP03','T1-MOLLI','T2-FLASH']
 ID_list=['MP01','MP02','MP03','T1_MOLLI','T1_MOLLI_FB','T2_FLASH','T2_FLASH_FB']
 
 keys=['CIRC_ID']
 #value=[CIRC_ID_list[1]]
-#df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
-df_CIRD=df
+df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+#df_CIRD=df
 #%%
 df_t1=df_CIRD.copy()
 searchfor_T1=[ID_list[i] for i in [0,3,4]]
@@ -252,6 +253,7 @@ for y_ind,seg in enumerate(['global']):
     axs[0].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
     print('T1:'+f'{pvalue_asterisks}')
     axs[0].set_title('Comparison of MP-EPI and T1-MOLLI')
+    axs[0].set_ylim([950,1900])
     #axs[0].set_ylim=(0,max(all_data_T1[0])*1.1)
     searchfor_slice=[f'{seg}',f'{seg}',f'{seg}']
     str_read=seg
@@ -281,16 +283,107 @@ for y_ind,seg in enumerate(['global']):
     x1, x2,x3 = 1,2, 3
     print('T2:'+f'{pvalue_asterisks}')
     y, h, col = y_position*1.1, y_position*0.05, 'k'
-
+    axs[1].set_ylim([30,65])
     axs[1].plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
-    axs[1].plot([x1, x1, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[1].plot([x1, x1, x3, x3], [y, y+2*h, y+2*h, y], lw=1.5, c=col)
+    axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
     axs[1].set_ylabel('T2_value')
     axs[1].set_title('Comparison of MP-EPI and T2-FLASH')
     axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
     axs[1].text((x1+x2)*.5, y+h, pvalue_asterisks[0], ha='center', va='bottom', color=col)
     axs[1].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
+    axs[1].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
     #axs[1].set_ylim=((0,max(all_data_T2[0])*1.1))
-    axs[1].text((x1+x3)*.5, y+h, f'p={p_values[2]:.2f}', ha='center', va='bottom', color=col)
+    #axs[1].text((x1+x3)*.5, y+h, f'p={p_values[2]:.2f}', ha='center', va='bottom', color=col)
+    #axs[1].set_title(f'{seg}')
+
+plt.show()
+#%%
+fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(6, 10))
+#The global value
+# for y_ind,seg in enumerate(['global','septal','lateral']):
+for y_ind,seg in enumerate(['global']):
+    searchfor_slice=[f'{seg}',f'{seg}',f'{seg}']
+
+    str_read=seg
+    column=['ID']
+    column.append(str_read)
+    df_slice0=df_t1[column]
+    mean=[]
+    var=[]
+    all_data_T1=[]
+    for sample,search_read in enumerate(searchfor_T1):
+        if sample==0:
+            df_plot=df_slice0[df_slice0['ID'].str.contains(search_read)]
+            df_plot = df_plot[~df_plot.isnull()]
+        elif sample>0:
+            df_plot=df_slice0[df_slice0['ID']==search_read]
+            df_plot = df_plot[~df_plot.isnull()]
+        all_data_T1.append(df_plot[str_read].tolist())
+        mean.append(np.mean(df_plot[str_read]))
+        var.append(np.std(df_plot[str_read]))
+    p_values=get_p_value(all_data_T1)
+    pvalue_asterisks=[convert_pvalue_to_asterisks(p) for p in p_values ]
+    print('T1', p_values)
+    bplot1 = axs[0].boxplot(all_data_T1,
+                        patch_artist=True,
+                        labels=searchfor_T1)  # will be used to label x-ticks
+    axs[0].set_ylabel('T1_value')
+    y_position =   max(max(all_data_T1)) 
+    x1, x2,x3 = 1,2, 3
+
+    y, h, col = max(map(max, all_data_T1))*1.1, max(map(max, all_data_T1))*0.05, 'k'
+
+    axs[0].plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #axs[0].plot([x1, x1, x3, x3], [y, y+2*h, y+2*h, y], lw=1.5, c=col)
+    #axs[0].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[0].text((x1+x2)*.5, y+h, pvalue_asterisks[0], ha='center', va='bottom', color=col)
+    #axs[0].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
+    #axs[0].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
+    print('T1:'+f'{pvalue_asterisks}')
+    axs[0].set_title('Comparison of MP-EPI and T1-MOLLI')
+    axs[0].set_ylim([950,1900])
+    #axs[0].set_ylim=(0,max(all_data_T1[0])*1.1)
+    searchfor_slice=[f'{seg}',f'{seg}',f'{seg}']
+    str_read=seg
+    column=['ID']
+    column.append(str_read)
+    df_slice0=df_t2[column]
+    mean=[]
+    var=[]
+    all_data_T2=[]
+    for sample,search_read in enumerate(searchfor_T2):
+        if sample==0:
+            df_plot=df_slice0[df_slice0['ID'].str.contains(search_read)]
+            df_plot = df_plot[~df_plot.isnull()]
+        elif sample>0:
+            df_plot=df_slice0[df_slice0['ID']==search_read]
+            df_plot = df_plot[~df_plot.isnull()]
+        all_data_T2.append(df_plot[str_read].tolist())
+        mean.append(np.mean(df_plot[str_read]))
+        var.append(np.std(df_plot[str_read]))
+    p_values=get_p_value(all_data_T2)
+    print('T2', p_values)
+    pvalue_asterisks=[convert_pvalue_to_asterisks(p) for p in p_values ]
+    bplot1 = axs[1].boxplot(all_data_T2,
+                        patch_artist=True,  # fill with color
+                        labels=searchfor_T2)  # will be used to label x-ticks
+    y_position =   max(max(all_data_T2)) 
+    x1, x2,x3 = 1,2, 3
+    print('T2:'+f'{pvalue_asterisks}')
+    y, h, col = y_position*1.1, y_position*0.05, 'k'
+    axs[1].set_ylim([30,65])
+    axs[1].plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #axs[1].plot([x1, x1, x3, x3], [y, y+2*h, y+2*h, y], lw=1.5, c=col)
+    #axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[1].set_ylabel('T2_value')
+    axs[1].set_title('Comparison of MP-EPI and T2-FLASH')
+    #axs[1].plot([x2, x2, x3, x3], [y, y+h, y+h, y], lw=1.5, c=col)
+    axs[1].text((x1+x2)*.5, y+h, pvalue_asterisks[0], ha='center', va='bottom', color=col)
+    #axs[1].text((x2+x3)*.5, y+h, pvalue_asterisks[1], ha='center', va='bottom', color=col)
+    #axs[1].text((x1+x3)*.5, y+2*h, pvalue_asterisks[2], ha='center', va='bottom', color=col)
+    #axs[1].set_ylim=((0,max(all_data_T2[0])*1.1))
+    #axs[1].text((x1+x3)*.5, y+h, f'p={p_values[2]:.2f}', ha='center', va='bottom', color=col)
     #axs[1].set_title(f'{seg}')
 
 plt.show()
@@ -455,4 +548,23 @@ plt.xlabel('Reference T2 (ms)')
 plt.ylabel('MP-EPI T2 (ms)')
 plt.title('Corrlation of T2')
 plt.legend()
+# %%
+#
+#MEAN and STD
+
+print('MP01:',np.mean(all_data_T1[0]),'std:',np.std(all_data_T1[0]))
+print('T1:',np.mean(all_data_T1[1]),'std:',np.std(all_data_T1[1]))
+print('T1-FB:',np.mean(all_data_T1[2]),'std:',np.std(all_data_T1[2]))
+print('MP02:',np.mean(all_data_T2[0]),'std:',np.std(all_data_T2[0]))
+print('T2:',np.mean(all_data_T2[1]),'std:',np.std(all_data_T2[1]))
+print('T2-FB:',np.mean(all_data_T2[2]),'std:',np.std(all_data_T2[2]))
+print('DWI:',np.mean(all_data_DWI),'std:',np.std(all_data_DWI))
+
+# %%
+print('MP01:',np.mean(all_data_T1[0]),'std:',np.std(all_data_T1[0]))
+print('T1:',np.mean(all_data_T1[1]),'std:',np.std(all_data_T1[1]))
+print('MP02:',np.mean(all_data_T2[0]),'std:',np.std(all_data_T2[0]))
+print('T2:',np.mean(all_data_T2[1]),'std:',np.std(all_data_T2[1]))
+print('DWI:',np.mean(all_data_DWI),'std:',np.std(all_data_DWI))
+
 # %%

@@ -58,6 +58,7 @@ import statsmodels.api as sm
 from scipy.optimize import curve_fit
 from scipy.stats import chisquare
 import nibabel as nib
+
 try:
     from numba import njit #super fast C-like calculation
     _global_bNumba_support = True
@@ -123,13 +124,14 @@ class mapping:
 
                 # Use re.findall() to find all matches of the pattern in the string
                 matches = re.findall(pattern, tmp)
-                CIRC_ID=matches[0]
-                ID = tmp.split('\\')[-1]
                 if self.ID==None:
+                    ID = tmp.split('\\')[-1]
                     self.ID=ID
                 if self.CIRC_ID == None:
+                    CIRC_ID=matches[0]
                     self.CIRC_ID=CIRC_ID
-                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=75)
+
+                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=sigma)
                 self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
                 self.path = tmp
         else:
@@ -182,6 +184,7 @@ class mapping:
         except:
             #Hard Code TE
             TE=40
+
         try:
             self.bval = np.concatenate((np.zeros(1),
                                     np.ones(Nd)*500)) #default b = 500
@@ -200,15 +203,16 @@ class mapping:
             print('bvec is empty')
         try:
             if 'mp01' in self.ID.lower():
-                valueList=sorted(valueList)
+                #valueList=sorted(valueList)
                 valueList=[i+TE for i in valueList[::Nz]]
                 self.valueList=valueList
                 print('value:',valueList)
+                self.valueList=valueList
                 self.crange=[0,3000]
                 self.cmap='magma'
             elif 'mp02' in self.ID.lower():
                 #valueList=[30,35,40,50,60,70,80,100]
-                valueList=sorted(valueList)
+                #valueList=sorted(valueList)
                 valueList=[i for i in valueList[::Nz]]
                 print('value:',valueList)
                 self.valueList=valueList
@@ -409,136 +413,8 @@ class mapping:
         self.ADC=ADCmap
         return ADCmap
     # calculate diffusion tensor class method
-    def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False):
-        '''
-        Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
-        '''
-        print('Calculating diffusion tensor for data: ')
 
-        #first unwrap everything for faster calculation using Numba
-        G = self.bvec
-        bval = self.bval
-        self.b_matrix = -1 * np.array([
-                G[:,0]*G[:,0]*bval,  #    Bxx
-                G[:,1]*G[:,1]*bval, #     Byy
-                G[:,2]*G[:,2]*bval, #     Bzz
-                G[:,0]*G[:,1]*2*bval, #   Bxy
-                G[:,0]*G[:,2]*2*bval, #   Bxz
-                G[:,1]*G[:,2]*2*bval, #   Byz
-                np.ones(G[:,0].shape) # S0
-            ]).T
-        NxNyNz = self.Nx*self.Ny*self.Nz
 
-        if bNumba and _global_bNumba_support:
-            tensor, eval, evec = calctensor_numba(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        else:
-            tensor, eval, evec = calctensor(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        eval[eval<0] = 1e-10 # do this after numba fcn since it was supported
-        
-        # wrap everything back up
-        self.tensor = tensor.reshape([self.Nx,self.Ny,self.Nz,6])
-        self.eval = eval.reshape([self.Nx,self.Ny,self.Nz,3])
-        self.evec = evec.reshape([self.Nx,self.Ny,self.Nz,3,3]) # [Nx,Ny,Nz,xyz,p1p2p3]
-        #temp = np.copy(self.evec[:,:,:,1,:]) #blue and green are transposed
-        #self.evec[:,:,:,1,:] = self.evec[:,:,:,2,:] 
-        #self.evec[:,:,:,2,:] = temp
-
-        # calculate diffusion parametric maps
-        self.md = np.mean(self.eval,axis=3)
-        l1 = self.eval[...,0]
-        l2 = self.eval[...,1]
-        l3 = self.eval[...,2]
-
-        self.fa = np.sqrt(((l1-l2)**2 + (l2-l3)**2 + (l3-l1)**2) / ( l1**2 + l2**2 +l3**2 )
-                        ) / np.sqrt(2)
-        self.pvec = self.evec[...,0]
-        self.colFA = np.abs(self.pvec)*np.tile(self.fa[:,:,:,np.newaxis],(1,1,1,3))
-
-        if bCalcHA:
-            try:
-                self.ha = calcHA(self.pvec, self.CoM)
-            except:
-                self.go_define_CoM()
-                self.ha = calcHA(self.pvec, self.CoM)
-        else:
-            self.ha = np.copy(self.fa)*0
-        
-        self.hat = calcHAT(self.ha, self.mask_lv)
-        #except:
-        #    self.ha = np.zeros(fa.shape)
-        #    print('No LV mask!! Cannot run HA calculation: run *.go_segment_LV() class method first')
-        
-
-    def go_calc_DTI(self, bCalcHA=True, bFastOLS=False, bNumba=False, bclickCOM=False):
-        '''
-        Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
-        '''
-        print('Calculating diffusion tensor for data: ')
-
-        #first unwrap everything for faster calculation using Numba
-        G = self.bvec
-        bval = self.bval
-        self.b_matrix = -1 * np.array([
-                G[:,0]*G[:,0]*bval,  #    Bxx
-                G[:,1]*G[:,1]*bval, #     Byy
-                G[:,2]*G[:,2]*bval, #     Bzz
-                G[:,0]*G[:,1]*2*bval, #   Bxy
-                G[:,0]*G[:,2]*2*bval, #   Bxz
-                G[:,1]*G[:,2]*2*bval, #   Byz
-                np.ones(G[:,0].shape) # S0
-            ]).T
-        NxNyNz = self.Nx*self.Ny*self.Nz
-
-        if bNumba and _global_bNumba_support:
-            tensor, eval, evec = calctensor_numba(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        else:
-            tensor, eval, evec = calctensor(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        eval[eval<0] = 1e-10 # do this after numba fcn since it was supported
-        
-        # wrap everything back up
-        self.tensor = tensor.reshape([self.Nx,self.Ny,self.Nz,6])
-        self.eval = eval.reshape([self.Nx,self.Ny,self.Nz,3])
-        self.evec = evec.reshape([self.Nx,self.Ny,self.Nz,3,3]) # [Nx,Ny,Nz,xyz,p1p2p3]
-        #temp = np.copy(self.evec[:,:,:,1,:]) #blue and green are transposed
-        #self.evec[:,:,:,1,:] = self.evec[:,:,:,2,:] 
-        #self.evec[:,:,:,2,:] = temp
-
-        # calculate diffusion parametric maps
-        self.md = np.mean(self.eval,axis=3)
-        l1 = self.eval[...,0]
-        l2 = self.eval[...,1]
-        l3 = self.eval[...,2]
-
-        self.fa = np.sqrt(((l1-l2)**2 + (l2-l3)**2 + (l3-l1)**2) / ( l1**2 + l2**2 +l3**2 )
-                        ) / np.sqrt(2)
-        self.pvec = self.evec[...,0]
-        self.colFA = np.abs(self.pvec)*np.tile(self.fa[:,:,:,np.newaxis],(1,1,1,3))
-
-        if bCalcHA:
-            if bclickCOM:
-                self.go_define_CoM()
-                self.ha = calcHA(self.pvec, self.CoM)
-            else:
-                try:
-                    self.ha = calcHA(self.pvec, self.CoM)
-                except:
-                    self.go_define_CoM()
-                    self.ha = calcHA(self.pvec, self.CoM)
-        else:
-            self.ha = np.copy(self.fa)*0
-        
-        #except:
-        #    self.ha = np.zeros(fa.shape)
-        #    print('No LV mask!! Cannot run HA calculation: run *.go_segment_LV() class method first')
-        
 
     # segment LV endo and epi borders
     def go_segment_LV(
@@ -588,10 +464,10 @@ class mapping:
             if image_type == "b0":
                 image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
                 fig = plt.figure()
-                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                plt.imshow(image, cmap=cmap, vmax=np.max(image),vmin=np.min(image))
             
             elif image_type == "b0_avg":
-                image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1)
+                image = np.mean(self._data[:,:,z,:], axis=-1)
                 fig = plt.figure()
                 plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
                 
@@ -609,7 +485,7 @@ class mapping:
             elif image_type == "map":
                 image = self._map[:,:,z]
                 fig = plt.figure()
-                plt.imshow(image, cmap='gray',vmin=crange[0],vmax=crange[1])
+                plt.imshow(image, cmap=cmap,vmin=crange[0],vmax=crange[1])
             # draw ROIs
             plt.title('Slice '+ str(z))
             fig.canvas.manager.set_window_title('Slice '+ str(z))
@@ -634,22 +510,27 @@ class mapping:
             self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
 
             plt.close()
-        
-    def go_define_CoM(self):
-        '''
-        Double click to define the COM for each slice
-        '''
-        print('Define CoM for quick HA estimate')
-        self.CoM = [None]*self.Nz
-        for z in range(self.Nz):
-            image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
-            fig = plt.figure()
-            plt.imshow(image, cmap='gray')
-            plt.title('Slice '+str(z) + ", Double Click Center")
-            fig.canvas.manager.set_window_title('Slice '+str(z))
-            roi_CoM = RoiPoly(fig=fig, color='r')
-            self.CoM[z] = np.array([np.mean(roi_CoM.y), np.mean(roi_CoM.x)])
-            
+    
+    def go_create_GIF(path=None,CIRC_ID=None,ID=None,data=None):
+        if data == None:
+            data=self._data
+        if path==None:
+            path=self.path
+        if CIRC_ID==None:
+            CIRC_ID=self.CIRC_ID
+        if ID==None:
+            ID=self.ID
+
+        A2=np.copy(data)
+        Nz=np.shape(A2)[2]
+        for i in range(Nz):
+            A2[:,:,i,:] = data[...,i,:]/np.max(data[...,i,:])*255
+        A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+        img_dir= os.path.join(os.path.dirname(path),f'{CIRC_ID}_{ID}_moco_.gif')
+        self.createGIF(img_dir,A3,fps=5)
+
+
+
 
     # save the diffusion object
     def save(self, filename=None, path=None, ID=None, bMaynard=False):
@@ -687,6 +568,7 @@ class mapping:
         '''
         Print gloabl LV MD and LV FA values
         '''
+        self._map=self._map.clip(self.crange[0], self.crange[1])
         print(f'Global LV MD: {np.mean(self._map[self.mask_lv]): .2f} +/- {np.std(self._map[self.mask_lv]): .2f} um^2/ms')
 
 
@@ -717,8 +599,7 @@ class mapping:
                 filename=os.path.join(path, ID) + '.csv'
             if crange == None:
                 crange=self.crange
-            map=self._map
-            map=map[(map>=crange[0]) & (map<=crange[1])]
+            self._map=self._map.clip(crange[0], crange[1])
             keys=['CIRC_ID','ID']
             stats=[CIRC_ID,ID]
             for z in range(self.Nz):
@@ -951,7 +832,7 @@ class mapping:
                                             'eraseshape'
                                         ]})
 
-    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=True,path=None):
+    def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=False,path=None):
         if volume is None:
             volume = self._data
         if path ==None:
@@ -967,7 +848,7 @@ class mapping:
         if Nz==1:
             Nx,Ny,Nz,Nd=np.shape(volume)
             plt.style.use('dark_background')
-            fig,axs=plt.subplots(1,Nd, figsize=(1*3.3,Nd*3))
+            fig,axs=plt.subplots(1,Nd, figsize=(1*3.3,Nd*3.3), constrained_layout=True)
             for d in range(Nd):
                     if vmin is None:
                         vmin = np.min(volume)
@@ -976,24 +857,32 @@ class mapping:
                     axs[d].imshow(volume[:,:,0,d],cmap=cmap,vmin=vmin,vmax=vmax)
                     axs[d].set_title(f'{valueList[d]}',fontsize=5)
                     axs[d].axis('off')
+            img_dir= os.path.join(os.path.dirname(path),f'{ID}')
+            if plot:
+                plt.savefig(img_dir,bbox_inches='tight')
         elif len(np.shape(volume))==4:
             Nx,Ny,Nz,Nd=np.shape(volume)
             plt.style.use('dark_background')
-            fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))
+        
+            fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))            
             for d in range(Nd):
                 for z in range(Nz):
                     if vmin is None:
                         vmin = np.min(volume[:,:,z,:])
                     if vmax is None:
                         vmax = np.max(volume[:,:,z,:])
+
                     axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
-                    axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
+                    if z==0:
+                        axs[z,d].set_title(f'{d}\n{valueList[d]}',fontsize=5)
+                    else:
+                        axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
                     axs[z,d].axis('off')
         #plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
-        img_dir= os.path.join(os.path.dirname(path),f'{ID}')
-        if plot:
-            plt.savefig(img_dir)
+            img_dir= os.path.join(os.path.dirname(path),f'{ID}')
+            if plot:
+                plt.savefig(img_dir)
         return fig,axs
     def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
         try:
@@ -1024,9 +913,10 @@ class mapping:
         figsize = (3.4*num_slice, 3)
 
         fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+        axes=axes.ravel()
         for sl in range(num_slice):
             axes[sl].set_axis_off()
-            im = axes[sl].imshow(np.flip(volume[..., sl],axis=0), vmin=crange[0],vmax=crange[1], cmap=cmap)
+            im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
         cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
         img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}')
         if plot:
@@ -1053,7 +943,7 @@ class mapping:
         num_slice=self.Nz
         figsize = (num_slice*3, 3)
         fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True,squeeze=False)
-        
+        axes=axes.ravel()
         for sl in range(num_slice):
             alpha = self.mask_lv[..., sl] * 1.0
             base_im = self._data[:, :, sl, 0]
@@ -1163,10 +1053,14 @@ class mapping:
         if cropzone is None:
             if self.cropzone == []:
                 if self.Nz == 1:
-                    Nx, Ny, Nd = data.shape
+                    try:
+                        Nx, Ny, Nz,Nd = data.shape
+                    except:
+                        Nx,Ny,Nd=data.shape
                     img_crop, cropzone = imcrop(np.sum(data, axis=2))
                     Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nd)
+                    shape = (Nx, Ny, Nz,Nd)
+                #Sometimes Nz=1 is not defined
                 elif len(np.shape(data))==3:
                     Nx, Ny, Nz = data.shape
                     img_crop, cropzone = imcrop(np.sum(data, axis=2))
@@ -1178,6 +1072,7 @@ class mapping:
                     Nx, Ny = img_crop.shape
                     shape = (Nx, Ny, Nz, Nd)
             else:
+                #Read the class cropzone
                 try:
                     cropzone = self.cropzone
                     temp = imcrop(data[:,:,0,0], cropzone)
@@ -1375,7 +1270,74 @@ class mapping:
         
         print(' ')
         return data_reg
-    
+    def _coregister_elastix_return_transform(self, data=None, orig_data=None, target_index=0, regMethod="affine", #"rigid", 
+                                metric="AdvancedMattesMutualInformation", 
+                                interpolator='BSplineInterpolator', 
+                                ResampleInterpolator="FinalBSplineInterpolator",
+                                optimizer='AdaptiveStochasticGradientDescent', 
+                                NumberOfSpatialSamples= 2048,#4096, 
+                                NumberOfSamplesForExactGradient= 2048, #4096,
+                                NumberOfIterations=50,
+                                numThreads= int(multiprocessing.cpu_count() / 1), # use 1/2 of CPUs
+                                verbose=False):
+        
+        if data is None:
+            data = np.copy(self._data)
+        data_reg = np.copy(data)
+        sitk.ProcessObject.SetGlobalWarningDisplay(False) #suppress annoying warnings
+        elastixImageFilter = sitk.ElastixImageFilter()
+        transformixImageFilter = sitk.TransformixImageFilter()
+        params = sitk.GetDefaultParameterMap(regMethod,)
+        params["Metric"] = (metric,)
+        params["Interpolator"] = (interpolator,)
+        params["Optimizer"] = (optimizer, )
+        params["ResampleInterpolator"] = (ResampleInterpolator,)
+        params["NumberOfSpatialSamples"] = (str(NumberOfSpatialSamples),)
+        params["NumberOfSamplesForExactGradient"] = (str(NumberOfSamplesForExactGradient),)
+        params["MaximumNumberOfIterations"] = (str(NumberOfIterations), )
+        params["NumberOfResolutions"] = (str(4), )
+        params["NewSamplesEveryIteration"] = ('true', )
+        #params["ImagePyramidSchedule"] = (str([8, 8, 2, 2, 1, 1]), )
+        elastixImageFilter.SetParameterMap(params)
+        elastixImageFilter.SetNumberOfThreads(numThreads)
+        if verbose:
+            elastixImageFilter.LogToConsoleOn()
+            transformixImageFilter.LogToConsoleOn()
+        else:
+            elastixImageFilter.LogToConsoleOff()
+            transformixImageFilter.LogToConsoleOff()
+
+        #print('... Using '+str(numThreads)+' threads ... ')
+        #print(' ... Diff Meas ', end='')
+        Nd = data.shape[-1]
+        Transfromers=[]
+        for d in range(Nd): #tqdm(range(Nd)):
+            #if d % np.round(Nd*0.1) == 0:
+            #    print(str(int(d*1./Nd*100))+'%,', end='')
+            fixedImage = sitk.GetImageFromArray(data[:,:,target_index].T)
+            movingImage = sitk.GetImageFromArray(data[:,:,d].T)
+            elastixImageFilter.SetMovingImage( movingImage )
+            elastixImageFilter.SetFixedImage( fixedImage )
+            
+            # run registration
+            # return registration directly on input data (default)
+            elastixImageFilter.Execute()
+            resultImage = elastixImageFilter.GetResultImage()
+            Transfromers.append(elastixImageFilter)
+            # get transformation params and save them as transformix filter
+            # run registration on the original data using the transform from the input data
+            # this is the case for LRT
+            if not (orig_data is None):
+                transformixImageFilter.SetTransformParameterMap(elastixImageFilter.GetTransformParameterMap())
+                orig_data_MovingImage = sitk.GetImageFromArray(orig_data[:,:,d].T)
+                transformixImageFilter.SetMovingImage(orig_data_MovingImage)
+                transformixImageFilter.Execute()
+                resultImage = transformixImageFilter.GetResultImage()
+            
+            data_reg[:,:,d] = sitk.GetArrayFromImage(resultImage).T
+        
+        print(' ')
+        return data_reg,Transfromers
     # register images using simple ITK
     def _coregister_SITK(self, data, target_index=0, lrate=0.01, niter=1000):
         data_reg = np.copy(data)
@@ -1489,289 +1451,6 @@ class mapping:
 # Helper functions -- NOT a class function accessible by the object
 #########################################################################################
 
-# calc tensor with Numba
-# needed to be separate because Numba doesnt understand class object type
-#@njit #(parallel=True)
-def calctensor(data, b_matrix, bFastOLS=False):
-    NxNyNz = data.shape[0]
-    S = np.zeros((data.shape[1],), dtype=np.float64)
-    logS = np.zeros((data.shape[1],), dtype=np.float64)
-    tensor_map = np.zeros((NxNyNz,6), dtype=np.float64)
-    eval_map = np.zeros((NxNyNz,3), dtype=np.float64)
-    evec_map = np.zeros((NxNyNz,3,3), dtype=np.float64)
-    evec = np.zeros((3,3), dtype=np.float64)
-    eval = np.zeros((3,), dtype=np.float64)
-    D = np.zeros((7,), dtype=np.float64)
-
-    A_pinv = np.linalg.pinv(b_matrix)
-    for i in tqdm(range(NxNyNz)):
-    #for i in range(NxNyNz):
-        S = np.abs(data[i,:])
-        S[S==0] = 1
-        logS = np.log(S)
-        if bFastOLS:
-            D = np.dot(A_pinv, logS)
-        else:
-            # remove rcond=None if using numba
-            #D = np.linalg.lstsq(b_matrix, logS, rcond=None)[0] 
-            [Q,R] = np.linalg.qr(b_matrix)
-            R = R[:,0:b_matrix.shape[0]]
-            D = np.linalg.inv(R).dot(Q.T.dot(logS))
-        D[np.isnan(D)] = 0.0
-        D[np.isinf(D)] = 0.0
-        #D = b_matrix \ logS; %LU decomposition
-        tensor_map[i,:] = D[0:6]
-        #numba only supports 'no domain change'
-        # so we need to cast as complex and then strip real later
-        D_mat = np.array([[D[0], D[3], D[4]],
-                        [D[3], D[1], D[5]],
-                        [D[4], D[5], D[2]]], dtype=np.complex128)
-        eval, evec = np.linalg.eigh(D_mat) 
-        eval = eval.real
-        evec = evec.real
-        eval[eval < 0] = 1e-16
-        ind = np.argsort(eval)
-        eval_map[i,:] = eval[ind[::-1]] 
-        evec_map[i,:,:] = evec[:,ind[::-1]]
-    return tensor_map, eval_map, evec_map    
-
-# calc tensor with Numba
-# needed to be separate because Numba doesnt understand class object type
-if _global_bNumba_support:
-    @njit #(parallel=True)
-    def calctensor_numba(data, b_matrix, bFastOLS=False):
-        NxNyNz = data.shape[0]
-        S = np.zeros((data.shape[1],1), dtype=np.float64)
-        logS = np.zeros((data.shape[1],1), dtype=np.float64)
-        tensor_map = np.zeros((NxNyNz,6), dtype=np.float64)
-        eval_map = np.zeros((NxNyNz,3), dtype=np.float64)
-        evec_map = np.zeros((NxNyNz,3,3), dtype=np.float64)
-        evec = np.zeros((3,3), dtype=np.float64)
-        eval = np.zeros((3,), dtype=np.float64)
-        D = np.zeros((7,), dtype=np.float64)
-
-        A_pinv = np.linalg.pinv(b_matrix)
-        for i in range(NxNyNz):
-            if np.mod(i,int(NxNyNz*0.1)) == 0:
-                print('... ' + str(int(i/NxNyNz*100)) +'%')
-            S = np.abs(data[i,:])
-            S[S==0] = 1
-            logS = np.log(S)
-            if bFastOLS:
-                #D = np.dot(A_pinv, logS)
-                D = np.linalg.inv(b_matrix.T.dot(b_matrix)).dot(b_matrix.T).dot(logS)
-            else:
-                # remove rcond=None if using numba
-                #D = np.linalg.lstsq(b_matrix, logS)[0] 
-                [Q,R] = np.linalg.qr(b_matrix)
-                R = np.linalg.inv(R[:,0:b_matrix.shape[0]])
-                D = np.dot(R,np.dot(Q.T,logS))
-            D[np.isnan(D)] = 0.0
-            D[np.isinf(D)] = 0.0
-            #D = b_matrix \ logS; %LU decomposition
-            tensor_map[i,:] = D[0:6]
-            #numba only supports 'no domain change'
-            # so we need to cast as complex and then strip real later
-            D_mat = np.array([[D[0], D[3], D[4]],
-                            [D[3], D[1], D[5]],
-                            [D[4], D[5], D[2]]], dtype=np.complex128)
-            eval, evec = np.linalg.eig(D_mat) 
-            eval = eval.real
-            evec = evec.real
-            eval[eval < 0] = 1e-16
-            ind = np.argsort(eval)
-            eval_map[i,:] = eval[ind[::-1]] 
-            evec_map[i,:,:] = evec[:,ind[::-1]]
-        return tensor_map, eval_map, evec_map    
-
-# calculate helix angle
-def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
-           ):
-    
-    def normVecs( vecs ):
-        ix = np.linalg.norm(vecs, axis=0) > 1e-6
-        vecs[:,ix] = vecs[:,ix] / np.linalg.norm(vecs[:,ix], axis=0) 
-        vecs[:,~ix] = np.nan
-        return vecs
-    
-    Nx, Ny, Nz, _ = pvec.shape
-    ha_map = np.zeros((Nx,Ny,Nz))
-    for z in range(Nz):
-        for x in range(Nx):
-            for y in range(Ny):
-                CoM = CoM_stack[z]
-
-                # define tangent plane, normal axis, and radial vector
-                radvec = np.array([x, y, 0.]) - np.array([CoM[0],CoM[1], 0.]) #in plane radial vector
-                radvec = radvec / np.linalg.norm(radvec)
-                #zvec = normVecs(zvec).T
-                #zvec = np.array([0, 0, 1]) #normal axis
-                tvec = np.cross(radvec.T, zvec.T) # traverse plane                
-                tvec = tvec / np.linalg.norm(tvec)
-
-                # calculate HA
-                A = np.array([tvec, zvec]).T
-                #proj1 = np.linalg.pinv(np.dot(A.T, A))
-                #proj2 = np.dot(A, proj1)
-                #proj3 = np.dot(proj2, A.T)
-                #proj = np.dot(proj3,pvec[x,y,z,:].T).T
-                proj3 = A.dot(np.linalg.pinv(A.T.dot(A))).dot(A.T)
-                proj  = proj3.dot(pvec[x,y,z,:].T).T
-                proj = proj / np.linalg.norm(proj)
-                HA = np.rad2deg(np.arccos(tvec.dot(proj))) #deg
-                
-                # check HA for correct orientation
-                cross_check = np.cross(tvec,proj)
-                dot_check = np.dot(cross_check,radvec)
-                if HA > 90:
-                    HA = HA - 180
-                
-                if dot_check > 0:
-                    HA = -HA
-
-                ha_map[x,y,z] = HA
-    return ha_map
-
-def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
-    Nx, Ny, Nz = ha.shape
-    thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
-    hatMean = 0.
-    NTotalSpokes = 0
-    if method == "OLS":
-        for z in range(Nz):
-            if (not np.any(np.array(reject_slice)==z)) * (not np.all(lv_mask[:,:,z] == 0)):
-                ind = np.where(lv_mask[:,:,z])
-                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
-                for theta in thetaArray:
-                    spoke = []
-                    for r in range(np.min([Nx,Ny])):
-                        x = int(r*np.cos(theta)+CoM[0])
-                        y = int(r*np.sin(theta)+CoM[1])
-                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
-                            continue
-                        if lv_mask[x,y,z]:
-                            spoke.append(ha[x,y,z])
-                    
-                    if len(spoke) > 2:
-                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
-                        hat, _ = np.polyfit(transmuralDepth, spoke, 1)
-                        hatMean += hat
-                        NTotalSpokes += 1
-
-                        
-    if method == "WLS":        
-        for z in range(Nz):
-            if (not np.any(np.array(reject_slice)==z)) * (not np.all(lv_mask[:,:,z] == 0)):
-                ind = np.where(lv_mask[:,:,z])
-                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
-                for theta in thetaArray:
-                    spoke = []
-                    for r in range(np.min([Nx,Ny])):
-                        x = int(r*np.cos(theta)+CoM[0])
-                        y = int(r*np.sin(theta)+CoM[1])
-                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
-                            continue
-                        if lv_mask[x,y,z]:
-                            spoke.append(ha[x,y,z])
-                    
-                    if len(spoke) > 2:
-                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
-                        res_sm = sm.OLS(spoke, sm.add_constant(transmuralDepth)).fit()
-                        
-                        for _ in range(Niter):
-                            
-                            res_resid = sm.OLS([abs(resid) for resid in res_sm.resid], sm.add_constant(res_sm.fittedvalues)).fit()
-                            mod_fv = res_resid.fittedvalues
-                            mod_fv[mod_fv == 0] = np.min(np.delete(mod_fv, np.argwhere(mod_fv==0))) # handle division by 0
-                            weights = 1 / (mod_fv**2)
-                            res_sm = sm.WLS(spoke, sm.add_constant(transmuralDepth), weights=weights).fit()
-
-                        hat = res_sm.params
-                            
-                        hatMean += hat[1]
-                        NTotalSpokes += 1
-
-                        
-    return hatMean / NTotalSpokes
-
-
-
-# calculate helix angle transmurality
-def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
-    Nx, Ny, Nz = ha.shape
-    thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
-    
-    HAT_perslice = []
-    
-    if method == "OLS":
-        
-        for z in range(Nz):
-            hatMean = 0.
-            NTotalSpokes = 0
-            
-            if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
-                ind = np.where(lv_mask[:,:,z])
-                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
-                for theta in thetaArray:
-                    spoke = []
-                    for r in range(np.min([Nx,Ny])):
-                        x = int(r*np.cos(theta)+CoM[0])
-                        y = int(r*np.sin(theta)+CoM[1])
-                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
-                            continue
-                        if lv_mask[x,y,z]:
-                            spoke.append(ha[x,y,z])
-                    
-                    if len(spoke) > 2:
-                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
-                        hat, _ = np.polyfit(transmuralDepth, spoke, 1)
-                        hatMean += hat
-                        NTotalSpokes += 1
-            
-            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
-        
-        
-    if method == "WLS":
-        
-        for z in range(Nz):
-            hatMean = 0.
-            NTotalSpokes = 0
-            
-            if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
-                ind = np.where(lv_mask[:,:,z])
-                CoM = np.array([int(np.mean(ind[0])), int(np.mean(ind[1]))])
-                for theta in thetaArray:
-                    spoke = []
-                    for r in range(np.min([Nx,Ny])):
-                        x = int(r*np.cos(theta)+CoM[0])
-                        y = int(r*np.sin(theta)+CoM[1])
-                        if x > (Nx-1) or x < 0 or y > (Ny-1) or y < 0:
-                            continue
-                        if lv_mask[x,y,z]:
-                            spoke.append(ha[x,y,z])
-                    
-                    if len(spoke) > 2:
-                        transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
-                        res_sm = sm.OLS(spoke, sm.add_constant(transmuralDepth)).fit()
-                        
-                        for _ in range(Niter):
-                            
-                            res_resid = sm.OLS([abs(resid) for resid in res_sm.resid], sm.add_constant(res_sm.fittedvalues)).fit()
-                            mod_fv = res_resid.fittedvalues
-                            mod_fv[mod_fv == 0] = np.min(np.delete(mod_fv, np.argwhere(mod_fv==0))) # handle division by 0
-                            weights = 1 / (mod_fv**2)
-                            res_sm = sm.WLS(spoke, sm.add_constant(transmuralDepth), weights=weights).fit()
-
-                        hat = res_sm.params
-                            
-                        hatMean += hat[1]
-                        NTotalSpokes += 1
-            
-            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
-        
-                    
-    return HAT_perslice    
-
 #TODO      
 #Make a weighted least square fit
 #Equation: abs(ra+rb *exp(-TI/T1))
@@ -1781,49 +1460,47 @@ def ir_recovery(tVec,T1,ra,rb):
     #Return T1Vec,ra,rb
     return ra + rb* np.exp(-tVec/T1)
 def chisquareTest(obs,exp):
-    return np.sum(((obs-exp)**2/exp))
+    return np.sum(((abs(obs)-abs(exp))**2/abs(exp)))
 def sub_ir_fit_lm(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2):
-
-    try:
+    data_ori=data
+    if type=='WLS':
+        T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data,TIlist)
+        for _ in range(Niter):
+            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+            if error=='l1':
+                simga_square=abs(ydata_exp-data)
+            elif error=='l2':
+                simga_square=abs(ydata_exp-data)**2
+            weights = 1 / (simga_square)
+            params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1,ra,rb],maxfev=5000,sigma=weights,absolute_sigma=True)
+            #print(weights)
+            T1_exp,ra_exp,rb_exp=params_WLS
+        ###If the error is higher than OLS use OLS
+        ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+        #if chisquareTest(dataTmp,ydata_exp_OLS)<chisquareTest(dataTmp,ydata_exp):
+        #    T1_exp,ra_exp,rb_exp=params_OLS
+    elif type=='OLS':
         params_OLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1,ra,rb],maxfev=5000)
         T1_exp,ra_exp,rb_exp=params_OLS
         ydata_exp_OLS=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-        if type=='WLS':
-            for _ in range(Niter):
-                ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-                if error=='l1':
-                    simga_square=abs(ydata_exp-data)
-                elif error=='l2':
-                    simga_square=abs(ydata_exp-data)**2
-                weights = 1 / (simga_square)
-                params_WLS,params_covariance = curve_fit(ir_recovery,TIlist,data,method='lm',p0=[T1,ra,rb],maxfev=5000,sigma=weights,absolute_sigma=True)
-                #print(weights)
-                T1_exp,ra_exp,rb_exp=params_WLS
-            ###If the error is higher than OLS use OLS
-            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-            #if chisquareTest(dataTmp,ydata_exp_OLS)<chisquareTest(dataTmp,ydata_exp):
-            #    T1_exp,ra_exp,rb_exp=params_OLS
-        elif type=='OLS':
-            T1_exp,ra_exp,rb_exp=params_OLS
-            ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
-        #Get the chisquare
-        res=chisquareTest(data,ydata_exp)
-    except:
-        ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-        T1_exp=T1
-        ra_exp=ra
-        rb_exp=rb
+        T1_exp,ra_exp,rb_exp=params_OLS
+        ydata_exp=ir_recovery(TIlist,T1_exp,ra_exp,rb_exp)
+    #Get the chisquare
+    n=len(TIlist)
+    #res=chisquareTest(data,ydata_exp)
+    res=1. / np.sqrt(n) * np.sqrt(np.power(1 - ydata_exp / data_ori.T, 2).sum())
     return T1_exp,ra_exp,rb_exp,res,ydata_exp
 
 def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
     ###From rdNlsPr from qmrlab
     if np.size(data) != np.size(TIlist):
         return
+    data_ori=data
     T1Start = T1bound[0]
     T1Stop= T1bound[1]
     #If Zoom it could be different, by default it's 1
     TIarray=np.array(TIlist)
-    T1Vec = np.matrix(np.arange(T1Start, T1Stop+1, 1, dtype=np.float))
+    T1Vec = np.matrix(np.arange(T1Start, T1Stop+1, 1, dtype=float))
     Nlen=np.size(TIarray)
     the_exp = np.exp(-TIarray[:,np.newaxis] * 1/T1Vec)
     exp_sum = 1. / Nlen * the_exp.sum(0).T
@@ -1839,11 +1516,15 @@ def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
     rb_exp=rho_ty_vec[maxInd,0] / rho_norm_vec[maxInd,0]
     ra_exp=1./Nlen*(y_sum - rb_exp*the_exp[:, maxInd].sum())
     ydata_exp=ir_recovery(TIarray,T1_exp,ra_exp,rb_exp)
-    res=chisquareTest(data,ydata_exp)
+
+    #res=chisquareTest(data_ori,ydata_exp)
+    n=len(TIlist)
+    res=1. / np.sqrt(n) * np.sqrt(np.power(1 - ydata_exp / data_ori.T, 2).sum())
+
     return T1_exp,ra_exp,rb_exp,res,ydata_exp
 
 def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2,searchtype='grid',
-            T1bound=[1,5000]):
+            T1bound=[1,5000],invertPoint=4):
     aEstTmps=[]
     bEstTmps=[]
     T1EstTmps=[]
@@ -1858,20 +1539,22 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
         minInd=1
     elif minInd==len(TIlist):
         minInd=len(TIlist)-1'''
-    #Invert the data to before,at,after the min
-    for ii in range(2):
-        if ii==0:
-            #before at the min
-            minIndTmp=minInd
+    #Invert the data to 2x*before,at, 2x*after the min
+    invertPoint=None
+    if invertPoint==None:
+        iterNum=0,2
+    else:
+        iterNum=1-int(invertPoint/2),1+int(invertPoint/2)+1
+
+    for ii in range(iterNum[0],iterNum[1],1):
+        try:
+            minIndTmp=minInd+int(ii)
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
             dataTmp=data*invertMatrix.T
             minIndTmps.append(minIndTmp)
-        if ii==1:
-            #at the min
-            minIndTmp=minInd+1
-            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
-            dataTmp=data*invertMatrix.T
-            minIndTmps.append(minIndTmp)
+        except:
+            continue
+
         if searchtype == 'lm':
             try: 
                 T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,
@@ -1900,17 +1583,20 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     ra_final=aEstTmps[returnInd]
     rb_final=bEstTmps[returnInd]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-    return T1_final,ra_final,rb_final,resTmps[returnInd],int(minIndTmps[returnInd])
-def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000]):
+    return T1_final,ra_final,rb_final,resTmps,resTmps[returnInd]
 
-    if len(np.shape(data))==3:
+#Only work in size 1, please write for loop if you want it to be in multiple slice
+def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
+    try:
         Nx,Ny,Nd=np.shape(data)
-        Nz=1
+    except:
+        Nx,Ny,Nz,Nd=np.shape(data)
+    if len(np.shape(data))==3 or Nz==1:
         NxNy=int(Nx*Ny)
-        finalMap=np.zeros((Nx,Ny))
-        finalRa=np.zeros((Nx,Ny))
-        finalRb=np.zeros((Nx,Ny))
-        finalRes=np.zeros((Nx,Ny))
+        finalMap=np.zeros((Nx,Ny,1))
+        finalRa=np.zeros((Nx,Ny,1))
+        finalRb=np.zeros((Nx,Ny,1))
+        finalRes=np.zeros((Nx,Ny,1))
     elif len(np.shape(data))==4:
         Nx,Ny,Nz,Nd=np.shape(data)
         finalMap=np.zeros((Nx,Ny,Nz))
@@ -1920,13 +1606,114 @@ def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS'
         NxNy=int(Nx*Ny)
     #Calculate all slices
     dataTmp=np.copy(data)
-    for z in range(Nz):
+    for z in tqdm(range(Nz)):
         
         for x in range(Nx):
             for y in range(Ny):
-                finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,_=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
-            T1bound=T1bound)
+                finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
+            T1bound=T1bound,invertPoint=invertPoint)
     return finalMap,finalRa,finalRb,finalRes
+def go_ir_fit_parrllel(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4,core=5):
+    from multiprocessing import Pool
+    from functools import partial
+    try:
+        Nx,Ny,Nd=np.shape(data)
+    except:
+        Nx,Ny,Nz,Nd=np.shape(data)
+    if len(np.shape(data))==3 or Nz==1:
+        NxNyNz=int(Nx*Ny*1)
+        finalMap=np.zeros((Nx*Ny*1))
+        finalRa=np.zeros((Nx*Ny*1))
+        finalRb=np.zeros((Nx*Ny*1))
+        finalRes=np.zeros((Nx*Ny*1))
+    elif len(np.shape(data))==4:
+        Nx,Ny,Nz,Nd=np.shape(data)
+        finalMap=np.zeros((Nx*Ny*Nz))
+        finalRa=np.zeros((Nx*Ny*Nz))
+        finalRb=np.zeros((Nx*Ny*Nz))
+        finalRes=np.zeros((Nx*Ny*Nz))
+        NxNyNz=int(Nx*Ny*Nz)
+    partial_process_slice = partial(ir_fit, data, TIlist, ra, rb, T1, type, error, Niter, searchtype, T1bound,invertPoint)
+    dataTmp=np.reshape(data,(NxNyNz,Nd))
+    pool=Pool(processes=int(os.cpu_count()/2))
+    results = pool.map(partial_process_slice, range(NxNyNz))
+    # Close the pool of worker processes
+    pool.close()
+    pool.join()
+    for p in range(NxNyNz):
+        result=pool.apply_async()
+        finalMap[p],finalRa[p],finalRb[p],Res,_=results[p]
+    T1Map=np.reshape(finalMap,(Nx,Ny,Nz))
+    RaMap=np.reshape(finalRa,(Nx,Ny,Nz))
+    RbMap=np.reshape(finalRb,(Nx,Ny,Nz))
+    return T1Map,RaMap,RbMap,Res
+
+def moco(data,obj,valueList=None,target_ind=0):
+    if valueList==None:
+        valueList=obj.valueList
+    data_regressed=decompose_LRT(data)
+    obj.imshow_corrected(volume=data_regressed,ID=f'{obj.ID}_Regressed',valueList=valueList,plot=True)
+    #Show the images
+    #Remove the MP01
+    Nx,Ny,Nz,_=np.shape(data_regressed)
+    data_corrected_temp=np.copy(data_regressed)
+    A2=np.copy(data_regressed)
+    for z in range(Nz):
+        data_corrected_temp[:,:,z,:]=obj._coregister_elastix(data_regressed[:,:,z,:],data[:,:,z,:],target_index=target_ind)
+        A2[:,:,z,:] = data_corrected_temp[...,z,:]/np.max(data_corrected_temp[...,z,:])*255
+    if Nz==3:
+        A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+    elif Nz==1:
+        A3=np.squeeze(A2)
+    data_return=data_corrected_temp
+    obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_lrt_moco',valueList=valueList,plot=True)
+    img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_lrt_moco_.gif')
+    obj.createGIF(img_dir,A3,fps=5)
+    return data_return
+def moco_naive(data,obj,valueList=None,target_ind=0):
+    if valueList==None:
+        valueList=obj.valueList
+    data_tmp=np.copy(data)
+    Nx,Ny,Nz,_=np.shape(data_tmp)
+    data_corrected_temp=np.copy(data_tmp)
+    A2=np.copy(data_tmp)
+    for z in range(Nz):
+        data_corrected_temp[:,:,z,:]=obj._coregister_elastix(data_tmp[:,:,z,:],data[:,:,z,:],target_index=target_ind)
+        A2[:,:,z,:] = data_corrected_temp[...,z,:]/np.max(data_corrected_temp[...,z,:])*255
+    A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+    data_return=data_corrected_temp
+    obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_naive_moco',valueList=valueList,plot=True)
+    img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_naive_moco_.gif')
+    obj.createGIF(img_dir,A3,fps=5)
+    return data_return
+
+
+def bmode(data,dir,x=None,y=None):
+    if dir==None:
+        dir='b_mode'
+    Nx,Ny,Nz,Nd=np.shape(data)
+    if x==None and y==None:
+        y=int(np.shape(data)[0]/2)
+    if x is not None:
+        A2=np.zeros((Ny,Nz,Nd),dtype=np.float64)
+        A2=data[x,:,:,:]
+    elif y is not None:
+        A2=np.zeros((Nx,Nz,Nd),dtype=np.float64)
+        A2=data[:,y,:,:]
+    if Nz !=1:
+        fig,axs=plt.subplots(1,Nz)
+        ax=axs.ravel()
+        for i in range(Nz):
+            ax[i].imshow(A2[...,i,:],cmap='gray')
+            ax[i].set_title(f'z={i}')
+            #ax[i].axis('off')
+    elif Nz==1:
+        A3=np.squeeze(A2)
+        plt.imshow(A3,cmap='gray')
+        #plt.axis('off')
+    plt.savefig(dir)
+
+
 
 #########################################################################################
 # DEPRECATED BUT USEFUL FUCNTIONS NOT PART OF DIFFUSION CLASS

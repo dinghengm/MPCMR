@@ -54,7 +54,6 @@ from libDiffusion_V2 import diffusion  # <--- this is all you need to do diffusi
 # processing on your own laptop is default (bMaynard=False)
 path=r'C:\Research\MRI\Ungated\CIRC_00325\MR_ep2d_diff_moco2asym_ungated_b500_TE59_32ave'
 dti = diffusion(data=path)
-dti.cropzone=[]
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 data_final, diffBVal, diffGrad, datasets=dti.dicomread(dirpath=path)
@@ -71,11 +70,42 @@ crop_data,cropzone=dti._crop(data_final)
 import numpy as np
 A2=np.copy(crop_data)
 k=60
-fig,axs=plt.subplots(4,20,figsize=(20,80))
-axs=axs.flatten()
-Nx,Ny,_,Nd=np.shape(A2)
+
+Nx,Ny,Nz,Nd=np.shape(A2)
 #Try to find the first direction, and then caculate the kmeans
 read_slice=6
+#%%
+test=np.reshape(A2[:,:,6,:],(Nx*Ny,Nd))
+rpca = R_pca(test)
+L, S = rpca.fit(max_iter=500, iter_print=100)
+
+#%%
+L_plot=np.reshape(L,(Nx,Ny,Nd))
+S_plot=np.reshape(S,(Nx,Ny,Nd))
+
+fig,axes=plt.subplots(10,5,figsize=(10*3,5*3))
+ax=axes.ravel()
+for i in range(50):
+    ax[i].imshow(L_plot[:,:,i],cmap='gray')
+#%%
+fig,axes=plt.subplots(10,5,figsize=(10*3,5*3))
+ax=axes.ravel()
+for i in range(50):
+    ax[i].imshow(S_plot[:,:,i],cmap='gray')
+#%%
+L_all=np.copy(crop_data)
+S_all=np.copy(crop_data)
+for z in range(Nz):
+    test=np.reshape(A2[:,:,z,:],(Nx*Ny,Nd))
+    rpca = R_pca(test)
+    L, S = rpca.fit(max_iter=500, iter_print=100)
+    L_all[:,:,z,:]=np.reshape(L,(Nx,Ny,Nd))
+    S_all[:,:,z,:]=np.reshape(S,(Nx,Ny,Nd))
+#%%
+np.save('CIRC_00325_L',L_all)
+np.save('CIRC_00325_S',S_all)
+
+#%%
 X_train_norm = preprocessing.normalize(A2[:,:,read_slice,:].reshape(Nx*Ny,Nd))
 for ind,ax in enumerate(axs):
     ax.imshow(X_train_norm[:,ind].reshape(Nx,Ny),cmap='gray')
