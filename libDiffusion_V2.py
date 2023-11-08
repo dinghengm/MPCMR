@@ -10,14 +10,22 @@
 #
 # INSTALLATION PACKAGES PREREQ
 # install anaconda first
-#
+###Try
+#conda install -c anaconda python=3.8
+# conda install "numpy>=1.16.5,<1.23.0"
+#conda install scipy==1.6.2
+# conda install -c tensorly tensorly
+#conda install -c conda-forge pydicom
+#conda install -c conda-forge imageio
 # pip install roipoly
-# pip install SimpleITK-SimpleElastix
+# pip install SimpleITK-SimpleElastix #
 # pip install imgbasics
 # conda install tqdm <--should already be there
-# pip install ipyfilechooser
-# pip install opencv-python
-# python -m pip install statsmodels
+# conda install -c simpleitk simpleitk
+#conda install -c anaconda openpyxl
+
+# pip install opencv-python  #conda install -c conda-forge opencv
+# python -m pip install statsmodels #conda install -c anaconda statsmodels
 
 # %%
 import numpy as np

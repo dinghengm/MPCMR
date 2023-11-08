@@ -412,7 +412,6 @@ class mapping:
         ADCmap=np.mean(ADC_temp,axis=-1)
         self.ADC=ADCmap
         return ADCmap
-    # calculate diffusion tensor class method
 
 
 
@@ -1930,6 +1929,12 @@ def readFolder(dicomPath,sortBy='tval',reject=False,default=327,sortSlice=True,s
             i=list(sliceLocs).index(abs(float(ds.SliceLocation)))
             data_final[:,:,i,j_dict[str(i)]] = ds.pixel_array
             j_dict[str(i)]+=1
+            try:
+                diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
+                diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
+                print(i,j_dict[str(i)],[float(temp) for temp in diffGrad_str_array], ds[hex(int('0019',16)), hex(int('100c',16))].repval)
+            except:
+                continue
         print(triggerList)
         return data_final,valueList,dcmFilesList
     elif sortSlice==False:

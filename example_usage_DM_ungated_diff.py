@@ -57,6 +57,37 @@ dti = diffusion(data=path)
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 data_final, diffBVal, diffGrad, datasets=dti.dicomread(dirpath=path)
+#%%
+##Read the data
+L=np.load(r'C:\Research\MRI\Ungated\CIRC_00325_ungated_L.npy')
+S=np.load(r'C:\Research\MRI\Ungated\CIRC_00325_ungated_S.npy')
+Nx,Ny,Nz,Nd=np.shape(L)
+#Generate GIF
+L2=np.zeros((Nx,Ny,Nd))
+S2=np.zeros((Nx,Ny,Nd))
+O2=np.zeros((Nx,Ny,Nd))
+for i in range(12):
+    O2=L[:,:,i,:]+S[:,:,i,:]
+    O2=O2/np.max(O2)*255
+    L2=L[:,:,i,:]/np.max(L[:,:,i,:])*255
+    S2=S[:,:,i,:]/np.max(S[:,:,i,:])*255
+    img_dir= os.path.join(os.path.dirname(path),f'L_{i}.gif')
+    dti.createGIF(img_dir,L2,fps=5)
+    img_dir= os.path.join(os.path.dirname(path),f'S_{i}.gif')
+    dti.createGIF(img_dir,S2,fps=5)
+    img_dir= os.path.join(os.path.dirname(path),f'O_{i}.gif')
+    dti.createGIF(img_dir,O2,fps=5)
+
+
+#%%
+#Can you SVD on L?
+import tensorly as tl
+L_5=np.reshape(L[:,:,5,:],(Nx*Ny,Nd))
+tensor = tl.tensor(L_5)
+#Plot the first 5 components.
+U,G,V=tl.svd_interface(tensor,n_eigenvecs=10)
+#%%
+
 
 
 # %% Crop Data ##########################################################################

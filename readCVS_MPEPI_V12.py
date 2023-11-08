@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 #%%
 dirname='C:\Research\MRI\MP_EPI'
-df=pd.read_csv(os.path.join(dirname,'mappingISMRMNov5_HR.csv'))
+df=pd.read_csv(os.path.join(dirname,r'mappingDat_Sep19_Nov_3.csv'))
 #Read one only
 
 #CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00393','CIRC_00407']    
@@ -17,8 +17,8 @@ ID_list=['MP01','MP02','MP03','T1_MOLLI','T1_MOLLI_FB','T2_FLASH','T2_FLASH_FB']
 
 keys=['CIRC_ID']
 #value=[CIRC_ID_list[1]]
-df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
-#df_CIRD=df
+#df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+df_CIRD=df
 #%%
 df_t1=df_CIRD.copy()
 searchfor_T1=[ID_list[i] for i in [0,3,4]]

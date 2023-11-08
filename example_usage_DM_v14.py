@@ -17,13 +17,12 @@ from skimage.transform import resize as imresize
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
-plt.rcParams['savefig.dpi'] = 500
 from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
 plot=True
 # %%
-CIRC_ID='CIRC_00382'
+CIRC_ID='CIRC_00405'
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 dirpath=os.path.dirname(dicomPath)
 MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,sortBy='seriesNumber')
@@ -68,7 +67,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Delete the ones that 
 ####Be careful for the delete!!!!!!#############################3
-MP01_0._delete(d=[1,2,3,5,6,7,8,9,10,11,12,14,15,16,17,19,21,22,24,25,26,27,28,29,30,31,33,32,35,36,38,39,40,41,42,43,44,45,46,48,49,50])
+MP01_0._delete(d=[0,2,5,6,7,8,9,11,10,14,15,16,17,18,19,21,22,23,25,26,28,29,30,31,33,34,36,37,39,40,41,42,43])
 fig,axs=MP01_0.imshow_corrected(ID='MP01_0_T1_seletive1',plot=plot)
 #%%
 #Try momo
@@ -114,7 +113,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Truncation
 ####Be careful for the delete!!!!!!#############################3
-MP01_1._delete(d=[1,2,3,5,6,8,9,11,12,14,15,16,17,20,21,22,24,26,27,28,29,30,31,33,34,35,36,37,38,39,41,43,44,46,47,48,49,50])
+MP01_1._delete(d=[0,2,4,6,7,8,9,10,12,13,15,17,18,19,22,23,21,25,26,27,28,29,30,31,33,34,35,37,39,41,42,43])
 fig,axs=MP01_1.imshow_corrected(ID='MP01_1_T1_seletive1',plot=plot)
 #%%
 data_return=moco(MP01_1._data,MP01_1)
@@ -155,7 +154,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Truncation
 ####Be careful for the delete!!!!!!#############################3
-MP01_2._delete(d=[1,2,4,5,6,8,11,12,15,16,22,24,26,27,28,29,30,31,32,34,36,37,38,40,41,43,44,46,47,49])
+MP01_2._delete(d=[0,3,4,5,6,9,11,12,14,15,16,18,19,20,22,23,24,26,27,28,31,33,34,36,37,38,41,42,44])
 fig,axs=MP01_2.imshow_corrected(ID='MP01_2_T1_seletive1',plot=plot)
 #%%
 #LRT
@@ -223,7 +222,7 @@ data_return02_naive=moco_naive(MP02_temp_Ind0,MP02,MP02_temp_list)
 
 
 #%%
-MP02._save_nib(data=data_return02_naive[:,:,:,1::])
+MP02._save_nib(data=data_return02_lrt[:,:,:,1::])
 print(MP02.valueList)
 #%%
 
@@ -241,7 +240,7 @@ data_return03_naive=moco_naive(MP03_temp_Ind0,MP03,MP03_temp_list)
 
 
 #%%
-MP02._data=data_return02_naive[:,:,:,1::]
+MP02._data=data_return02_lrt[:,:,:,1::]
 MP03._data=data_return03_lrt[:,:,:,1::]
 
 #%%

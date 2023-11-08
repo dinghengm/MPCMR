@@ -173,8 +173,8 @@ import os
 
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-path=r'C:\Research\MRI\exvivo\UCSF_7025_07032023\CIRC_DEVELOPMENT_diffusion\MR ep2d_diff_mddw30_p2_s2'
-dti = diffusion(data=path,bFilenameSorted=True)
+path=r'C:\Research\MRI\MP_EPI\CIRC_00373_22737_CIRC_00373_22737\CIRC_RESEARCH CIRC Research\MR ep2d_diff_Cima_M2_asym_5slices_b500_TE59_FOVphase37.5'
+dti = diffusion(data=path)
 
 # %% ####################################################################################
 # Calculate DTI Params ##################################################################
