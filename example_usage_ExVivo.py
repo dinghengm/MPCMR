@@ -43,6 +43,9 @@ diffGradArray = []
 diffBValArray = []
 for ind,ds in enumerate(datasets):
     data[:,:,:,ind]=ds.pixel_array
+    xaxis = datasets[0]['0x5200','0x9230'][0]['0x0020','0x9116'][0]['0x0020','0x0037'][0:3]
+    yaxis = datasets[0]['0x5200','0x9230'][0]['0x0020','0x9116'][0]['0x0020','0x0037'][3:6]
+    zaxis = np.cross(xaxis,yaxis)
     try:
         diffGrad_str=ds['0x5200','0x9230'][0]['0x0018','0x9117'][0]['0x0018','0x9076'][0]['0x0018','0x9089'].value
     except:
@@ -50,23 +53,41 @@ for ind,ds in enumerate(datasets):
     diffGradArray.append(diffGrad_str)
     diffBVal_str=ds['0x5200','0x9230'][0]['0x0018','0x9117'][0]['0x0018','0x9087']
     diffBValArray.append(diffBVal_str.value)
+    diffGrad = np.zeros((Nd,3))
+    diffBVal = np.zeros((Nd,))
+    diffBValTarget = diffBValArray
+    diffGradTarget = diffGradArray
+for d in range(Nd):
+    dd = int(d/range(Nd).step) #int(d/Nz)
+    diffBVal[dd] = diffBValTarget[d]
+    diffGrad[dd,0] = np.dot(xaxis, diffGradTarget[d])
+    diffGrad[dd,1] = np.dot(yaxis, diffGradTarget[d])
+    diffGrad[dd,2] = np.dot(zaxis, diffGradTarget[d])
+    diffGrad[dd,:] = diffGrad[dd,:]/np.linalg.norm(diffGrad[dd,:])
 # %%
 #Maybe I assume 1 b0, 72 b500, and it's 12 Direction * 6
 #path=r'C:\Research\MRI\Ungated\CIRC_00325\MR_ep2d_diff_moco2asym_ungated_b500_TE59_32ave'
+datatmp=np.zeros((Nz,Ny,Nx,Nd))
+diffGradArraytmp=[]
+transMatrix=[[0,0,-1],[0,1,0],[1,0,0]]
+for dd in range(Nd):
+    datatmp[...,dd]=np.rot90(data[:,:,:,dd],k=1,axes=(0,2))
+    diffGradArraytmp.append(np.dot(transMatrix,diffGradArray[dd]))
+##
+#We know the initiate bvec code will swap the bvec 0 and 1
+#So swap one mor time
+diffGradArraytmp=np.array(diffGradArraytmp)
+temp = np.copy(diffGradArraytmp[:,0])
+diffGradArraytmp[:,0] = diffGradArraytmp[:,1]
+diffGradArraytmp[:,1] = temp
+#%%
 
-datatmp=np.transpose(data,(1,2,0,3))
-bvec=np.copy(np.array(diffGradArray))
-for i in range(73):
-    bvec[i,:][[1,2,0]]=np.array(diffGradArray)[i,:]
-dti_20 = diffusion(data=datatmp,bval=diffBValArray,bvec=np.array(diffGradArray),ID='UCSF_7020_05162023',datasets=datasets,bFilenameSorted=False)
+dti_20 = diffusion(data=datatmp,bval=diffBValArray,bvec=np.array(diffGradArraytmp),ID='UCSF_7020_05162023',datasets=datasets,bFilenameSorted=False)
 
 # %% ####################################################################################
 # Calculate DTI Params ##################################################################
 #########################################################################################
 %matplotlib qt
-dti_20.CoM = [None]*dti_20.Nz
-for i in range(dti_20.Nz):
-    dti_20.CoM[i] = np.array((35,40))
 #  Calculate DTI 
 dti_20.go_calc_DTI(bCalcHA=True,bFastOLS=True,bNumba=False,bclickCOM=False)
 
@@ -124,7 +145,7 @@ fig4.show()
 
 # save
 #%%
-dti.save(filename=r'C:\Research\MRI\exvivo\UCSF_7020_05162023\UCSF_7020_05162023.diffusion')
+dti_20.save(filename=r'C:\Research\MRI\exvivo\Send1\UCSF_7020_05162023.diffusion')
 
 #%%
 #Save the struct with
@@ -144,26 +165,27 @@ dti.save(filename=r'C:\Research\MRI\exvivo\UCSF_7020_05162023\UCSF_7020_05162023
 from numpy.core.records import fromarrays
 from scipy.io import savemat
 mdict={}
-mdict['data']=dti._data
-mdict['tensor']=dti.tensor
-mdict['md']=dti.md
-mdict['fa']=dti.fa
-mdict['pvec']=dti.pvec
-mdict['evals']=dti.eval
-mdict['ha']=dti.ha
-mdict['bval']=dti.bval
-mdict['G']=dti.bvec
-mdict['bmatrix']=dti.b_matrix
-mdict['param']=dti.datasets
-mdict['colFA']=dti.colFA
+mdict['data']=dti_20._data
+mdict['tensor']=dti_20.tensor
+mdict['md']=dti_20.md
+mdict['fa']=dti_20.fa
+mdict['pvec']=dti_20.pvec
+mdict['evals']=dti_20.eval
+mdict['ha']=dti_20.ha
+mdict['bval']=dti_20.bval
+mdict['G']=dti_20.bvec
+mdict['bmatrix']=dti_20.b_matrix
+mdict['colFA']=dti_20.colFA
 
-savemat(r'C:\Research\MRI\exvivo\UCSF_7020_05162023\UCSF_7020_05162023',mdict)
+savemat(r'C:\Research\MRI\exvivo\Send1\UCSF_7020_05162023',mdict)
 
 
 #%%
 from scipy.io import loadmat
 a=loadmat(r'C:\Research\MRI\exvivo\UCSF_7020_05162023\UCSF_7020_05162023')
-
+#%%
+for items in a:
+    print(items,f'{np.shape(a[items])}')
 #%%Use the traditional DTI
 %matplotlib inline                        
 from libDiffusion_V2 import diffusion  # <--- this is all you need to do diffusion processing
@@ -173,16 +195,14 @@ import os
 
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-path=r'C:\Research\MRI\MP_EPI\CIRC_00373_22737_CIRC_00373_22737\CIRC_RESEARCH CIRC Research\MR ep2d_diff_Cima_M2_asym_5slices_b500_TE59_FOVphase37.5'
+#%%
+path=r'C:\Research\MRI\exvivo\UCSF_7025_07032023\CIRC_DEVELOPMENT_diffusion\MR ep2d_diff_mddw30_p2_s2'
 dti = diffusion(data=path)
 
 # %% ####################################################################################
 # Calculate DTI Params ##################################################################
 #########################################################################################
 %matplotlib qt
-dti.CoM = [None]*dti.Nz
-for i in range(dti.Nz):
-    dti.CoM[i] = np.array((35,40))
 #  Calculate DTI 
 dti.go_calc_DTI(bCalcHA=True,bFastOLS=True,bNumba=False,bclickCOM=False)
 
@@ -224,6 +244,7 @@ fig1.layout.height = 10000
 fig2.layout.height = 10000
 fig3.layout.height = 10000
 fig4.layout.height = 10000
+#%%
 #md
 fig1.show()
 
@@ -239,8 +260,9 @@ fig4.show()
 
 # save
 #%%
-dti.save()
+dti.save(filename=r'C:\Research\MRI\exvivo\Send1\UCSF_7025.diffusion')
 
+#%%
 #%%
 #Save the struct with
 #data
@@ -271,14 +293,14 @@ mdict['G']=dti.bvec
 mdict['bmatrix']=dti.b_matrix
 dti.datasets=None
 #mdict['param']=dti.datasets
-mdict['colFA']=dti.colFA
-filename=os.path.join(dti.path,dti.ID)
+mdict['colFA']=colFA
+filename=r'C:\Research\MRI\exvivo\Send1\UCSF_7025'
 savemat(filename,mdict)
 
 
 #%%
 from scipy.io import loadmat
-a=loadmat(filename)
+a=loadmat(r'C:\Research\MRI\exvivo\Send1\UCSF_7025')
 # %%
 data=data.transpose(1,2,0,3)
 dti._data=data

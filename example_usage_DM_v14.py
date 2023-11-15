@@ -22,7 +22,7 @@ plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
 plot=True
 # %%
-CIRC_ID='CIRC_00405'
+CIRC_ID='CIRC_00419'
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 dirpath=os.path.dirname(dicomPath)
 MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,sortBy='seriesNumber')
