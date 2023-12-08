@@ -3,7 +3,7 @@
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from libMapping_v12 import * # <--- this is all you need to do diffusion processing
+from MPEPI.libMapping_v12 import * # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os

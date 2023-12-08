@@ -26,7 +26,7 @@ import warnings #we know deprecation may show bc we are using a stable older ITK
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 # %%
-path=r'C:\Research\MRI\exvivo\UCSF_7020_05162023\20230515_102113_900000_1\Beat_Perf_GRE'
+path=r'C:\Research\MRI\exvivo\SecondRUn\UCSF_7020 UCSF_7020\CIRC_DEVELOPMENT diffusion\MR ep2d_diff_mddw30_p2_s2'
 import fnmatch,pydicom
 import SimpleITK as sitk
 dicom_filelist = fnmatch.filter(sorted(os.listdir(path)),'*.dcm')
@@ -193,12 +193,69 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-#%%
-path=r'C:\Research\MRI\exvivo\UCSF_7025_07032023\CIRC_DEVELOPMENT_diffusion\MR ep2d_diff_mddw30_p2_s2'
-dti = diffusion(data=path)
 
+
+#%%
+ID='UCSF_7025'
+path=rf'C:\Research\MRI\exvivo\{ID}_07032023\CIRC_DEVELOPMENT_diffusion\MR ep2d_diff_mddw30_p2_s2'
+import fnmatch,pydicom
+import SimpleITK as sitk
+dicom_filelist = fnmatch.filter(sorted(os.listdir(path)),'*.dcm')
+if dicom_filelist == []:
+    dicom_filelist = fnmatch.filter(sorted(os.listdir(path)),'*.DCM')
+datasets = [pydicom.dcmread(os.path.join(path, file))
+                        for file in dicom_filelist]
+img = datasets[0].pixel_array
+Nx, Ny = img.shape
+NdNz = len(datasets)
+data = np.zeros((Nx,Ny,NdNz))
+sliceLocsArray = []
+diffGradArray = []
+diffBValArray = []
+xaxis = datasets[0].ImageOrientationPatient[0:3]
+yaxis = datasets[0].ImageOrientationPatient[3:6]
+zaxis = np.cross(xaxis,yaxis)
+for ind,ds in enumerate(datasets):
+    data[:,:,ind]=ds.pixel_array
+    sliceLocsArray.append(float(ds.SliceLocation))
+    try:
+        diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
+        diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
+        diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
+    except:
+        diffGrad_str=[1.0,0.0,0.0]
+        diffGradArray.append(diffGrad_str) 
+    diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
+    diffBValArray.append(float(diffBVal_str.split('\'')[1]))
+sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
+Nz = len(sliceLocs)
+diffBValTarget = np.array(diffBValArray)
+diffGradTarget = np.array(diffGradArray)
+Nd = int(NdNz/Nz)
+data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
+#%%
+diffDicomHDRRange = range(0,NdNz,Nz)
+
+# create numpy arrays and rotate diffusion gradients into image plane
+diffGrad = np.zeros((Nd,3))
+diffBVal = np.zeros((Nd,))
+for d in diffDicomHDRRange:
+    dd = int(d/diffDicomHDRRange.step) #int(d/Nz)
+    diffBVal[dd] = diffBValTarget[d]
+    diffGrad[dd,0] = np.dot(xaxis, diffGradTarget[d])
+    diffGrad[dd,1] = np.dot(yaxis, diffGradTarget[d])
+    diffGrad[dd,2] = np.dot(zaxis, diffGradTarget[d])
+    diffGrad[dd,:] = diffGrad[dd,:]/np.linalg.norm(diffGrad[dd,:])
+
+
+#%%
+dti = diffusion(data=data_final,bval=diffBVal,bvec=diffGrad,ID=ID,datasets=datasets)
+
+#%%
+plt.imshow(dti._data[:,:,35,0],cmap='gray')
 # %% ####################################################################################
 # Calculate DTI Params ##################################################################
 #########################################################################################
@@ -260,9 +317,23 @@ fig4.show()
 
 # save
 #%%
-dti.save(filename=r'C:\Research\MRI\exvivo\Send1\UCSF_7025.diffusion')
+savedir=r'C:\Research\MRI\exvivo\SecondRUn\Saved_Images'
+dti.save(filename=os.path.join(savedir,f'{ID}.diffusion'))
 
 #%%
+#Save SliceThickness
+#PixelSpacing
+#ImagePositionPatient
+#ImageOrientationPatient 
+pixelSpacing=datasets[0].PixelSpacing
+sliceThickness=datasets[0].SliceThickness
+ImagePositionPatientList=[]
+for ds in datasets:
+    ImagePositionPatientList.append(ds.ImagePositionPatient)
+ImagePositionPatientList_final = np.array(ImagePositionPatientList).reshape([Nz,Nd,3],order='F')
+imageOrientationPatient=datasets[0].ImageOrientationPatient
+
+
 #%%
 #Save the struct with
 #data
@@ -290,17 +361,27 @@ mdict['evals']=dti.eval
 mdict['ha']=dti.ha
 mdict['bval']=dti.bval
 mdict['G']=dti.bvec
+mdict['PixelSpacing']=pixelSpacing
+mdict['SliceThickness']=sliceThickness
+mdict['ImagePositionPatient']=ImagePositionPatientList
+mdict['ImageOrientationPatient']=imageOrientationPatient
 mdict['bmatrix']=dti.b_matrix
-dti.datasets=None
 #mdict['param']=dti.datasets
 mdict['colFA']=colFA
-filename=r'C:\Research\MRI\exvivo\Send1\UCSF_7025'
+mdict['PixelSpacing']=pixelSpacing
+mdict['SliceThickness']=sliceThickness
+mdict['ImagePositionPatient']=ImagePositionPatientList_final
+mdict['ImageOrientationPatient']=imageOrientationPatient
+filename=os.path.join(savedir,f'{ID}.mat')
 savemat(filename,mdict)
 
 
 #%%
 from scipy.io import loadmat
-a=loadmat(r'C:\Research\MRI\exvivo\Send1\UCSF_7025')
+filename=os.path.join(savedir,f'{ID}.mat')
+a=loadmat(filename)
+for items in a:
+    print(items,f'{np.shape(a[items])}')
 # %%
 data=data.transpose(1,2,0,3)
 dti._data=data

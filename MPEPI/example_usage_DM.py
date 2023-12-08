@@ -38,7 +38,7 @@ except:
     _global_bNumba_support = False
 
 
-from libMapping_v12 import mapping,readFolder  
+from MPEPI.libMapping_v12 import mapping,readFolder  
 
 %matplotlib qt
 

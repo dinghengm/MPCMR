@@ -1,7 +1,7 @@
 #%%
 %matplotlib qt                      
-from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v12 import readFolder,decompose_LRT,go_ir_fit,moco,moco_naive,bmode
+from MPEPI.libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
+from MPEPI.libMapping_v12 import readFolder,decompose_LRT,go_ir_fit,moco,moco_naive,bmode
 import numpy as np
 import matplotlib.pyplot as plt
 import os

@@ -12,8 +12,8 @@
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v12 import readFolder,decompose_LRT,go_ir_fit
+from MPEPI.libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
+from MPEPI.libMapping_v12 import readFolder,decompose_LRT,go_ir_fit
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -96,25 +96,57 @@ def moco(data,obj):
     return data_return
 data_return=moco(MP01_0._data,MP01_0)
 #%%
-data_tmp2 = MP01_0._coregister_elastix(data=np.squeeze(MP01_0._data),target_index=0)
+data_tmp0,Transform_0 = MP01_0._coregister_elastix_return_transform(data=np.squeeze(MP01_0._data),target_index=0)
 #MP01_0._data=data_tmp2[:,:,np.newaxis,:]
-MP01_0.imshow_corrected(volume=data_tmp2[:,:,np.newaxis,:],ID=f'MP01_Slice0_naive',plot=plot)
-A2=np.copy(data_tmp2)
-A2 = data_tmp2/np.max(data_tmp2)*255
+MP01_0.imshow_corrected(volume=data_tmp0[:,:,np.newaxis,:],ID=f'MP01_Slice0_naive_Ind0',plot=plot)
+A2=np.copy(data_tmp0)
+A2 = data_tmp0/np.max(data_tmp0)*255
 img_dir= os.path.join(dirpath,f'{MP01_0.ID}_naive_moco_ind0')
 MP01_0.createGIF(img_dir,np.squeeze(A2),fps=5)
 
 #%%
-MP01_0._data=data_tmp2[:,:,np.newaxis,:]
-finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=MP01_0._data,TIlist=MP01_0.valueList,searchtype='grid',invertPoint=4)
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp0[:,:,np.newaxis,:],TIlist=MP01_0.valueList,searchtype='grid',invertPoint=4)
 #MP01_0._map=finalMap
 plt.figure()
 plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
 plt.savefig(img_dir)
-MP01_0._save_nib()
-print(MP01_0.valueList)
 
 #%%
+MP01_0._delete(d=[5,-2])
+data_tmp0_refine,Transform_0_refine = MP01_0._coregister_elastix_return_transform(data=np.squeeze(MP01_0._data),target_index=0)
+#MP01_0._data=data_tmp2[:,:,np.newaxis,:]
+MP01_0.imshow_corrected(volume=data_tmp0_refine[:,:,np.newaxis,:],ID=f'MP01_Slice0_naive_refine',plot=plot)
+A2=np.copy(data_tmp0_refine)
+A2 = data_tmp0_refine/np.max(data_tmp0_refine)*255
+img_dir= os.path.join(dirpath,f'{MP01_0.ID}_naive_moco_refine')
+MP01_0.createGIF(img_dir,np.squeeze(A2),fps=5)
+
+#%%
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp0_refine[:,:,np.newaxis,:],TIlist=MP01_0.valueList,searchtype='grid',invertPoint=4)
+#MP01_0._map=finalMap
+plt.figure()
+plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
+plt.savefig(img_dir)
+
+#%%
+data_tmp0_8000,Transform_0_8000 = MP01_0._coregister_elastix_return_transform(data=np.squeeze(MP01_0._data),target_index=-1)
+#MP01_0._data=data_tmp2[:,:,np.newaxis,:]
+MP01_0.imshow_corrected(volume=data_tmp0_8000[:,:,np.newaxis,:],ID=f'MP01_Slice0_naive_Ind8000',plot=plot)
+A2=np.copy(data_tmp0_8000)
+A2 = data_tmp0_8000/np.max(data_tmp0_8000)*255
+img_dir= os.path.join(dirpath,f'{MP01_0.ID}_naive_moco_ind8000')
+MP01_0.createGIF(img_dir,np.squeeze(A2),fps=5)
+
+#%%
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp0_8000[:,:,np.newaxis,:],TIlist=MP01_0.valueList,searchtype='grid',invertPoint=4)
+#MP01_0._map=finalMap
+plt.figure()
+plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
+plt.savefig(img_dir)
+#%%
+MP01_0._data=data_tmp0[:,:,np.newaxis,:]
+MP01_0._save_nib()
+print(MP01_0.valueList)
 MP01_0._map=finalMap
 #%%
 data,valueDict,dcmDict = readFolder(dicomPath=dicomPath,reject=True,default=327,sigma=50,sortSlice=False)
@@ -140,30 +172,39 @@ MP01_1._delete(d=[0,2,4,6,9,10,11,15])
 #%%
 data_return=moco(MP01_1._data,MP01_1)
 #%%
-data_tmp1 = MP01_1._coregister_elastix(data=np.squeeze(MP01_1._data),target_index=0)
+data_tmp1_8000,Transform_1_8000 = MP01_1._coregister_elastix_return_transform(data=np.squeeze(MP01_1._data),target_index=-1)
+#MP01_0._data=data_tmp2[:,:,np.newaxis,:]
+MP01_1.imshow_corrected(volume=data_tmp1_8000[:,:,np.newaxis,:],ID=f'MP01_Slice1_naive_Ind8000',plot=plot)
+A2=np.copy(data_tmp1_8000)
+A2 = data_tmp1_8000/np.max(data_tmp1_8000)*255
+img_dir= os.path.join(dirpath,f'{MP01_1.ID}_naive_moco_ind8000')
+MP01_0.createGIF(img_dir,np.squeeze(A2),fps=5)
 
-MP01_1.imshow_corrected(volume=data_tmp1[:,:,np.newaxis,:],ID=f'MP01_Slice1_naive',plot=True)
-A2=np.copy(data_tmp1)
-A2 = data_tmp1/np.max(data_tmp1)*255
+#%%
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp1_8000[:,:,np.newaxis,:],TIlist=MP01_1.valueList,searchtype='grid',invertPoint=4)
+#MP01_0._map=finalMap
+plt.figure()
+plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
+plt.savefig(img_dir)
+#%%
+data_tmp1_0,Transform_1_0 = MP01_1._coregister_elastix_return_transform(data=np.squeeze(MP01_1._data),target_index=0)
+
+MP01_1.imshow_corrected(volume=data_tmp1_0[:,:,np.newaxis,:],ID=f'MP01_Slice1_naive_Ind0',plot=True)
+A2=np.copy(data_tmp1_0)
+A2 = data_tmp1_0/np.max(data_tmp1_0)*255
 img_dir= os.path.join(dirpath,f'{MP01_1.ID}_naive_moco_ind0')
 MP01_1.createGIF(img_dir,np.squeeze(A2),fps=5)
 #%%
-finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp1[:,:,np.newaxis,:],TIlist=MP01_1.valueList,searchtype='grid',invertPoint=4)
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp1_0[:,:,np.newaxis,:],TIlist=MP01_1.valueList,searchtype='grid',invertPoint=4)
 plt.figure()
-plt.subplot(411)
 plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
-plt.subplot(412)
-plt.imshow(finalRa)
-plt.subplot(413)
-plt.imshow(finalRb)
-plt.subplot(414)
-plt.imshow(finalRes)
 plt.savefig(img_dir)
-MP01_1._save_nib()
-print(MP01_1.valueList)
+
 
 #%%
 MP01_1._data=data_tmp1[:,:,np.newaxis,:]
+MP01_1._save_nib()
+print(MP01_1.valueList)
 MP01_1._map=finalMap
 #%%
 data,valueDict,dcmDict = readFolder(dicomPath=dicomPath,reject=True,default=327,sigma=50,sortSlice=False)
@@ -189,30 +230,37 @@ MP01_2._delete(d=[12,11,9,7,5,3,1])
 #LRT
 data_return=moco(MP01_2._data,MP01_2)
 #%%
-data_tmp = MP01_2._coregister_elastix(data=np.squeeze(MP01_2._data),target_index=0)
-MP01_2.imshow_corrected(volume=data_tmp[:,:,np.newaxis,:],ID=f'MP01_Slice2_naive',plot=True)
-A2=np.copy(data_tmp)
-A2 = data_tmp/np.max(data_tmp)*255
-img_dir= os.path.join(dirpath,f'{MP01_2.ID}_naive_moco')
+data_tmp2_0,Transform_2_0 = MP01_2._coregister_elastix_return_transform(data=np.squeeze(MP01_2._data),target_index=0)
+MP01_2.imshow_corrected(volume=data_tmp2_0[:,:,np.newaxis,:],ID=f'MP01_Slice2_naive_Ind0',plot=True)
+A2=np.copy(data_tmp2_0)
+A2 = data_tmp2_0/np.max(data_tmp2_0)*255
+img_dir= os.path.join(dirpath,f'{MP01_2.ID}_naive_moco_Ind0')
 MP01_2.createGIF(img_dir,np.squeeze(A2),fps=5)
 #%%
-finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp[:,:,np.newaxis,:]
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp2_0[:,:,np.newaxis,:]
 ,TIlist=MP01_2.valueList,searchtype='grid',T1bound=[1,5000],invertPoint=4)
 plt.figure()
-plt.subplot(411)
 plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
-plt.subplot(412)
-plt.imshow(finalRa)
-plt.subplot(413)
-plt.imshow(finalRb)
-plt.subplot(414)
-plt.imshow(finalRes)
-plt.savefig(img_dir)
-MP01_2._save_nib()
-print(MP01_2.valueList)
+
+#%%
+data_tmp2_8000,Transform_2_8000 = MP01_2._coregister_elastix_return_transform(data=np.squeeze(MP01_2._data),target_index=-1)
+MP01_2.imshow_corrected(volume=data_tmp2_8000[:,:,np.newaxis,:],ID=f'MP01_Slice2_naive_Ind8000',plot=True)
+A2=np.copy(data_tmp2_8000)
+A2 = data_tmp2_8000/np.max(data_tmp2_8000)*255
+img_dir= os.path.join(dirpath,f'{MP01_2.ID}_naive_moco_Ind8000')
+MP01_2.createGIF(img_dir,np.squeeze(A2),fps=5)
+#%%
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=data_tmp2_8000[:,:,np.newaxis,:]
+,TIlist=MP01_2.valueList,searchtype='grid',T1bound=[1,5000],invertPoint=4)
+plt.figure()
+plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
+
+
 # %%
 #Read MP02
 MP01_2._data=data_tmp[:,:,np.newaxis,:]
+MP01_2._save_nib()
+print(MP01_2.valueList)
 MP01_2._map=finalMap
 #%%
 dicomPath=os.path.join(dirpath,f'MP02_T2')
@@ -223,16 +271,7 @@ MP02.go_crop()
 MP02.go_resize(scale=2)
 #MP02.go_moco()
 MP02.imshow_corrected(ID='MP02_T2_raw',plot=True)
-# %%
-#Use the data_8000_cor for all MP02 and MP03 co-registered
-from imgbasics import imcrop
-from skimage.transform import resize as imresize
-shape=np.shape(MP02._data)
-data_8000_cor=np.zeros((shape[:3]),dtype=np.float64)
-data_8000_cor[:,:,0]=np.squeeze(MP01_0._data[...,-1])
-data_8000_cor[:,:,1]=np.squeeze(MP01_1._data[...,-1])
-data_8000_cor[:,:,2]=np.squeeze(MP01_2._data[...,-1])
-data_8000_tmp=np.copy(data_8000_cor[:,:,:,np.newaxis])
+
 #%%
 ##Use the IR70 for all MP02 and MP03 co-registered
 shape=np.shape(MP02._data)
@@ -240,14 +279,8 @@ data_8000_cor=np.zeros((shape[:3]),dtype=np.float64)
 data_8000_cor[:,:,0]=np.squeeze(MP01_0._data[...,0])
 data_8000_cor[:,:,1]=np.squeeze(MP01_1._data[...,0])
 data_8000_cor[:,:,2]=np.squeeze(MP01_2._data[...,0])
-data_8000_tmp=np.copy(data_8000_cor[:,:,:,np.newaxis])
-#%%
-##########Optional to coregister it to the data_8000_crop
-newshape = (np.shape(MP01_0._data)[0], np.shape(MP01_0._data)[1], data_8000.shape[2], data_8000.shape[3])
-data_8000_crop = np.zeros(newshape)
-for z in range(np.shape(data_8000)[2]):
-    data_8000_crop[:,:,z,:]=imresize(imcrop(data_8000[:,:,z,:], cropzone),(newshape[0],newshape[1]))
-data_8000_tmp=np.copy(data_8000_crop[:,:,:,np.newaxis])
+data_8000_tmp=np.copy(np.squeeze(data_8000_cor)[:,:,:,np.newaxis])
+
 #%%
 #TEMP:
 #Try to implement the LRT
@@ -256,35 +289,114 @@ data_8000_tmp=np.copy(data_8000_crop[:,:,:,np.newaxis])
 #MP02-MP01
 #Insert the MP01 to MP02
 print('Conducting Moco in MP02')
-MP02_temp=np.concatenate((data_8000_tmp,MP02._data),axis=-1)
-MP02_regressed=decompose_LRT(MP02_temp)
+MP02_temp_Ind0=np.concatenate((data_8000_tmp,MP02._data),axis=-1)
+MP02_regressed_Ind0=decompose_LRT(MP02_temp_Ind0)
 MP02_temp_list=MP02.valueList.copy()
 MP02_temp_list.insert(0,'T1')
-MP02.imshow_corrected(volume=MP02_regressed,ID='MP02_T2_Combined_Regressed',valueList=MP02_temp_list,plot=True)
+MP02.imshow_corrected(volume=MP02_regressed_Ind0,ID='MP02_T2_Combined_Regressed_Ind0',valueList=MP02_temp_list,plot=True)
 #Show the images
 #Remove the MP01
-Nx,Ny,Nz,_=np.shape(MP02_temp)
-MP02_temp_corrected_temp=np.copy(MP02_regressed)
+Nx,Ny,Nz,_=np.shape(MP02_temp_Ind0)
+MP02_temp_corrected_temp_Ind0=np.copy(MP02_regressed_Ind0)
 for z in range(Nz):
-    MP02_temp_corrected_temp[:,:,z,:]=MP02._coregister_elastix(MP02_regressed[:,:,z,:],MP02_temp[:,:,z,:])
-MP02._data=MP02_temp_corrected_temp[:,:,:,1::]
-MP02.imshow_corrected(ID='MP02_T2_Combined',plot=True)
+    MP02_temp_corrected_temp_Ind0[:,:,z,:]=MP02._coregister_elastix(MP02_regressed_Ind0[:,:,z,:],MP02_temp_Ind0[:,:,z,:])
+
+MP02.imshow_corrected(ID='MP02_T2_Combined_Ind0',volume=MP02_temp_corrected_temp_Ind0[:,:,:,1::],valueList=MP02_temp_list[1::],plot=True)
+MP02._save_nib(data=MP02_temp_corrected_temp_Ind0[:,:,:,1::])
+#%%
+newshape = (np.shape(MP01_0._data)[0], np.shape(MP01_0._data)[1], data_8000.shape[2], data_8000.shape[3])
+data_8000_crop = np.zeros(newshape)
+for z in range(np.shape(data_8000)[2]):
+    data_8000_crop[:,:,z,:]=imresize(imcrop(data_8000[:,:,z,:], cropzone),(newshape[0],newshape[1]))
+data_8000_tmp=np.copy(np.squeeze(data_8000_crop)[:,:,:,np.newaxis])
 
 #%%
+#TEMP:
+#Try to implement the LRT
+#Use MP01._coregister_elastix()
+#Perform on the first images:
+#MP02-MP01
+#Insert the MP01 to MP02
+print('Conducting Moco in MP02')
+MP02_temp_Ind8000=np.concatenate((data_8000_tmp,MP02._data),axis=-1)
+MP02_regressed_Ind8000=decompose_LRT(MP02_temp_Ind8000)
+MP02_temp_list=MP02.valueList.copy()
+MP02_temp_list.insert(0,'T1')
+MP02.imshow_corrected(volume=MP02_regressed_Ind8000,ID='MP02_T2_Combined_Regressed_Ind8000',valueList=MP02_temp_list,plot=True)
+#Show the images
+#Remove the MP01
+Nx,Ny,Nz,_=np.shape(MP02_temp_Ind8000)
+MP02_temp_corrected_temp_Ind8000=np.copy(MP02_regressed_Ind8000)
+for z in range(Nz):
+    MP02_temp_corrected_temp_Ind8000[:,:,z,:]=MP02._coregister_elastix(MP02_regressed_Ind8000[:,:,z,:],MP02_temp_Ind8000[:,:,z,:])
+
+MP02.imshow_corrected(ID='MP02_T2_Combined_Ind8000',volume=MP02_temp_corrected_temp_Ind8000[:,:,:,1::],valueList=MP02_temp_list[1::],plot=True)
+MP02._save_nib(data=MP02_temp_corrected_temp_Ind8000[:,:,:,1::])
+#%%
+MP02._data=MP02_temp_corrected_temp_Ind0[:,:,:,1::]
+#%%
 #MP03-MP01
+#%%
+##Use the IR70 for all MP02 and MP03 co-registered
+shape=np.shape(MP03._data)
+data_8000_cor=np.zeros((shape[:3]),dtype=np.float64)
+data_8000_cor[:,:,0]=np.squeeze(MP01_0._data[...,0])
+data_8000_cor[:,:,1]=np.squeeze(MP01_1._data[...,0])
+data_8000_cor[:,:,2]=np.squeeze(MP01_2._data[...,0])
+data_8000_tmp=np.copy(data_8000_cor[:,:,:,np.newaxis])
 print('Conducting Moco in MP03')
-MP03_temp=np.concatenate((data_8000_tmp,MP03._data),axis=-1)
-MP03_regressed=decompose_LRT(MP03_temp)
+MP03_temp_Ind0=np.concatenate((data_8000_tmp,MP03._data),axis=-1)
+MP03_regressed_Ind0=decompose_LRT(MP03_temp_Ind0)
 MP03_temp_list=MP03.valueList.copy()
 MP03_temp_list.insert(0,'T1')
-MP03.imshow_corrected(volume=MP03_regressed,ID='MP03_DWI_Combined_Regressed',valueList=MP03_temp_list,plot=True)
+MP03.imshow_corrected(volume=MP03_regressed_Ind0,ID='MP03_DWI_Combined_Regressed_Ind0',valueList=MP03_temp_list,plot=True)
 
-Nx,Ny,Nz,_=np.shape(MP03_temp)
-MP03_temp_corrected_temp=np.copy(MP03_regressed)
+MP03_temp_corrected_temp_Ind0=np.copy(MP03_regressed_Ind0)
 for z in range(Nz):
-    MP03_temp_corrected_temp[:,:,z,:]=MP03._coregister_elastix(MP03_regressed[:,:,z,:],MP03_temp[:,:,z,:])
-MP03._data=MP03_temp_corrected_temp[:,:,:,1::]
-MP03.imshow_corrected(ID='MP03_Combined',plot=True)
+    MP03_temp_corrected_temp_Ind0[:,:,z,:]=MP03._coregister_elastix(MP03_regressed_Ind0[:,:,z,:],MP03_temp_Ind0[:,:,z,:])
+
+MP03.imshow_corrected(ID='MP03_Combined_Ind0',volume=MP03_temp_corrected_temp_Ind0[:,:,:,1::],valueList=MP03_temp_list[1::],plot=True)
+#%%
+newshape = (np.shape(MP01_0._data)[0], np.shape(MP01_0._data)[1], data_8000.shape[2], data_8000.shape[3])
+data_8000_crop = np.zeros(newshape)
+for z in range(np.shape(data_8000)[2]):
+    data_8000_crop[:,:,z,:]=imresize(imcrop(data_8000[:,:,z,:], cropzone),(newshape[0],newshape[1]))
+data_8000_tmp=np.copy(np.squeeze(data_8000_crop)[:,:,:,np.newaxis])
+
+#%%
+#TEMP:
+#Try to implement the LRT
+#Use MP01._coregister_elastix()
+#Perform on the first images:
+#MP02-MP01
+#Insert the MP01 to MP02
+print('Conducting Moco in MP02')
+MP03_temp_Ind8000=np.concatenate((data_8000_tmp,MP03._data),axis=-1)
+MP03_regressed_Ind8000=decompose_LRT(MP03_temp_Ind8000)
+MP03_temp_list=MP03.valueList.copy()
+MP03_temp_list.insert(0,'T1')
+MP03.imshow_corrected(volume=MP03_regressed_Ind8000,ID='MP03_Combined_Regressed_Ind8000',valueList=MP03_temp_list,plot=True)
+#Show the images
+#Remove the MP01
+Nx,Ny,Nz,_=np.shape(MP03_temp_Ind8000)
+MP03_temp_corrected_temp_Ind8000=np.copy(MP03_regressed_Ind8000)
+for z in range(Nz):
+    MP03_temp_corrected_temp_Ind8000[:,:,z,:]=MP03._coregister_elastix(MP03_regressed_Ind8000[:,:,z,:],MP03_temp_Ind8000[:,:,z,:])
+
+MP03.imshow_corrected(ID='MP03_Combined_Ind8000',volume=MP03_temp_corrected_temp_Ind8000[:,:,:,1::],valueList=MP03_temp_list[1::],plot=True)
+MP03._save_nib(data=MP03_temp_corrected_temp_Ind8000[:,:,:,1::])
+#%%
+import copy
+MP03_Ind0=copy.copy(MP03)
+MP03_Ind0._data=MP03_temp_corrected_temp_Ind0[:,:,:,1::]
+MP03_Ind8000=copy.copy(MP03)
+MP03_Ind8000._data=MP03_temp_corrected_temp_Ind8000[:,:,:,1::]
+MP02_Ind0=copy.copy(MP02)
+MP02_Ind0._data=MP02_temp_corrected_temp_Ind0[:,:,:,1::]
+MP02_Ind8000=copy.copy(MP02)
+MP02_Ind8000._data=MP02_temp_corrected_temp_Ind8000[:,:,:,1::]
+#%%
+#Regress 
 #%%
 #PLOT MOCO
 for obj in [MP02,MP03]:
@@ -306,13 +418,34 @@ for obj in [MP01_0,MP01_1,MP01_2]:
     obj.save()
 #%%
 #Get the Maps
-ADC=MP03.go_cal_ADC()
-MP03._map=ADC*1000
-MP03.imshow_map()
+ADC=MP03_Ind0.go_cal_ADC()
+MP03_Ind0.ID='MP03_DWI_Ind0'
+MP03_Ind0._map=ADC*1000
+MP03_Ind0.imshow_map()
+
+ADC=MP03_Ind8000.go_cal_ADC()
+MP03_Ind8000.ID='MP03_DWI_Ind8000'
+MP03_Ind8000._map=ADC*1000
+MP03_Ind8000.imshow_map()
 
 #%%
 MP02._save_nib()
 print(f'MP02:{MP02.valueList}')
+#%%
+path=os.path.dirname(dicomPath)
+map_data=sio.loadmat(os.path.join(path,'mp02_Ind8000.mat'))
+map_data=map_data['T2']
+MP02_Ind8000._map= map_data
+MP02_Ind8000.ID='MP02_DWI_Ind8000'
+MP02_Ind8000.imshow_map()
+
+
+map_data=sio.loadmat(os.path.join(path,'mp02_Ind0.mat'))
+map_data=map_data['T2']
+MP02_Ind0._map= map_data
+MP02_Ind0.ID='MP02_DWI_Ind0'
+MP02_Ind0.imshow_map()
+
 #%%
 
 #Load the data

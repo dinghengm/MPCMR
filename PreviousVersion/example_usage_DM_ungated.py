@@ -43,25 +43,13 @@ except:
 from libMapping_v12 import *
 %matplotlib qt
 
-#%%
-%matplotlib qt
-CIRC_ID='CIRC_00325'
-dicomPath=rf'C:\Research\MRI\Ungated\{CIRC_ID}\MR_ep2d_diff_Cima_M2_asym_5slices_b500_TE59_FOVphase37.5'
-ID = dicomPath.split('\\')[-1]
-npy_data,valueList,dcmList= readFolder(dicomPath)
-import warnings #we know deprecation may show bc we are using a stable older ITK version
-warnings.filterwarnings("ignore", category=DeprecationWarning) 
-#Read Npy
-dti = images(data=npy_data,ID=ID,CIRC_ID=CIRC_ID) 
-#Read Mapping
-
 # %%
 dicomPath=rf'C:\Research\MRI\Ungated\{CIRC_ID}\MR_ep2d_diff_moco2asym_ungated_b500_TE59_32ave'
 ID = dicomPath.split('\\')[-1]
 npy_data,valueList,dcmList= readFolder(dicomPath)
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-
+CIRC_ID='CIRC_00333'
 dti_ungated = images(data=npy_data,ID=ID,CIRC_ID=CIRC_ID) 
 # %%
 dti._data=dti._raw_data

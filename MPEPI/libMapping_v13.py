@@ -75,7 +75,7 @@ class mapping:
     # data can be path to data or it can be numpy data
     def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
                 ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',reject=True,default=327,sigma=75): 
+                UIPath=None,TE=None,sortBy='tval',reject=True,default=327,sigma=75,bFilenameSorted=True): 
         
         '''
         Define class object and read in data
@@ -83,15 +83,14 @@ class mapping:
         Inputs:
          * data: select the dicom of the folder that holds all dicoms of diffusion data OR select a previous *.diffusion 
          * ID: if you don't set ID number it will be taken from DICOM
-         * bMaynard: default (bMaynard=False) to process on own laptop, pass bMaynard=True to process on Maynard
         #1.1 update: change the slice location
         '''
-        self.version = 1.2
+        self.version = 1.3
         self.ID = ID
         self.CIRC_ID=CIRC_ID
         if data is None:
             fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.mapping','*.diffusion'],bval=None,bvec=None,
-                                 path = UIPath)
+                                 path = UIPath,bFilenameSorted=bFilenameSorted)
           #Development Mode
         if type(data) == str: #given a path so try to load in the data
             tmp=data
@@ -101,7 +100,7 @@ class mapping:
             elif data.split('.')[-1] in {'dcm' , 'DCM'}:
                 print('Your data is in dcm form')
                 self.path = os.path.dirname(os.path.abspath(data))
-                data, bval, bvec, datasets = self.dicomread(self.path)  #Matthew fix one bug that now probabily load file if input is string
+                data, bval, bvec, datasets = self.dicomread(self.path,bFilenameSorted=bFilenameSorted)  #Matthew fix one bug that now probabily load file if input is string
                 self.__initialize_parameters(data=data,bval=bval,bvec=bvec,datasets=datasets)
             #Matthew add in read file from gz and npy 
             elif data.split('.')[-1] == 'gz':
@@ -119,7 +118,7 @@ class mapping:
                 print('Data loaded successfully')
                 self.path = os.path.dirname(os.path.abspath(data))
             else:
-            ##It will be the path to the folders
+                #Initite the ID/CIRC ID
                 pattern = r'CIRC_\d+'
 
                 # Use re.findall() to find all matches of the pattern in the string
@@ -130,10 +129,19 @@ class mapping:
                 if self.CIRC_ID == None:
                     CIRC_ID=matches[0]
                     self.CIRC_ID=CIRC_ID
+                if 'mp01' in self.ID.lower() or 'mp02' in self.ID.lower():
+                    npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=sigma)
+                    self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
+                    self.path = tmp
+                elif 'mp03' in self.ID.lower():
+                    data, bval, bvec, datasets = self.dicomread(data, bFilenameSorted=bFilenameSorted)
+                    self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
+                    self.path = tmp
+                else:
+                    npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=sigma)
+                    self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
+                    self.path = tmp
 
-                npy_data,value_List,dcmList= readFolder(tmp,sortBy=sortBy,reject=reject,default=default,sigma=sigma)
-                self.__initialize_parameters(data=npy_data,bval=bval,bvec=bvec,valueList=value_List,datasets=dcmList)
-                self.path = tmp
         else:
             self.__initialize_parameters(data=data,bval=bval,bvec=bvec,valueList=valueList,datasets=datasets)
         # this is junk code needed to initialize to allow for the interactive code to work
@@ -158,10 +166,12 @@ class mapping:
         if len(data.shape) == 4:
             [Nx, Ny, Nz, Nd] = data.shape
             self._map = np.zeros((Nx,Ny,Nz))
+            self.md = np.zeros((Nx,Ny,Nz))
         elif len(data.shape) == 3:
             [Nx, Ny, Nd] = data.shape
             Nz = 1
             self._map = np.zeros((Nx,Ny))
+            self.md = np.zeros((Nx,Ny))
         else:
             raise Exception('data needs to be 3D [Nx,Ny,Nd] or 4D [Nx,Ny,Nz,Nd] shape')
         self.Nx = Nx
@@ -174,35 +184,22 @@ class mapping:
         self.dcm_list = datasets
         if self.CIRC_ID == None:
             self.CIRC_ID = self.dcm_list[0].PatientID
-        try:
-            reader = sitk.ImageFileReader()
-            reader.SetFileName( self.dcm_list[0] )
-            reader.LoadPrivateTagsOn()
-            reader.ReadImageInformation()
-            TEtime=float(reader.GetMetaData('0018|0081'))
-            TE = TEtime
-        except:
-            #Hard Code TE
-            TE=40
 
         try:
-            self.bval = np.concatenate((np.zeros(1),
-                                    np.ones(Nd)*500)) #default b = 500
-            self.bvec = np.concatenate((np.zeros([1,3]),
-                                    self._getGradTable(Nd))) #default b = 500
-        except:
-            self.bval = bval
-            self.bvec = bvec
-        try:
-            #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
-            temp = np.copy(self.bvec[:,0])
-            self.bvec[:,0] = self.bvec[:,1]
-            self.bvec[:,1] = temp
-                #Initiate the label:
-        except:
-            print('bvec is empty')
-        try:
+            #If it's mp01
             if 'mp01' in self.ID.lower():
+                #Get the TE times
+                try:
+                    reader = sitk.ImageFileReader()
+                    reader.SetFileName( self.dcm_list[0] )
+                    reader.LoadPrivateTagsOn()
+                    reader.ReadImageInformation()
+                    TEtime=float(reader.GetMetaData('0018|0081'))
+                    TE = TEtime
+                except:
+                    #Hard Code TE
+                    TE=40
+
                 #valueList=sorted(valueList)
                 valueList=[i+TE for i in valueList[::Nz]]
                 self.valueList=valueList
@@ -210,6 +207,7 @@ class mapping:
                 self.valueList=valueList
                 self.crange=[0,3000]
                 self.cmap='magma'
+            #If it's mp02
             elif 'mp02' in self.ID.lower():
                 #valueList=[30,35,40,50,60,70,80,100]
                 #valueList=sorted(valueList)
@@ -218,12 +216,33 @@ class mapping:
                 self.valueList=valueList
                 self.crange=[0,150]
                 self.cmap='viridis'
+
+            #If it's mp03    
             elif 'mp03' in self.ID.lower():
-                valueList=['b50x','b50y','b50z','b500x','b500y','b500z']
-                print('value:',valueList)
-                self.valueList=valueList
                 self.crange=[0,3]
                 self.cmap='hot'
+                if bval == []:
+                    self.bval = np.concatenate((np.zeros(1),
+                                        np.ones(Nd)*500)) #default b = 500
+                else:
+                    self.bval = bval
+
+                if bvec == []:
+                    self.bvec = np.concatenate((np.zeros([1,3]),
+                                                self._getGradTable(Nd))) #default b = 500
+                else:
+                    self.bvec = bvec
+                    # swap x and y if phase encode is LR
+                    #try: 
+                    #if self.dcm_list[0][hex(int('0018',16)), hex(int('1312',16))].repval == "'ROW'":
+                    temp = np.copy(self.bvec[:,0])
+                    self.bvec[:,0] = self.bvec[:,1]
+                    self.bvec[:,1] = temp
+                    #except:
+                    #    if self.Nx > self.Ny:
+                    #        temp = np.copy(self.bvec[:,0])
+                    #        self.bvec[:,0] = self.bvec[:,1]
+                    #        self.bvec[:,1] = temp
         except:
             print('The data is the clinical data')
         
@@ -394,6 +413,7 @@ class mapping:
 
 
     #Calculate ADC method
+    #Only apply it one average will be replace later
     def go_cal_ADC(self):
         #Assume the first 3 is b50, the later 3 is b500
         print("Starting calculation of ADC")
@@ -660,11 +680,15 @@ class mapping:
     def dicomread(self, dirpath='.', bFilenameSorted=True):
         # print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
-        dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
-        if dicom_filelist == []:
-            dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.DCM')
-        datasets = [pydicom.dcmread(os.path.join(dirpath, file))
-                                for file in tqdm(dicom_filelist)]
+        dicom_filelist=[]
+        for dirpath,dirs,files in  os.walk(dirpath):
+            for x in files:
+                path=os.path.join(dirpath,x)
+                if path.endswith('dcm') or path.endswith('DCM'):
+                    dicom_filelist.append(path)
+        datasets = [pydicom.dcmread(path)
+                                for path in tqdm(dicom_filelist)]
+        
         
         i = 0
         img = datasets[0].pixel_array
@@ -679,89 +703,65 @@ class mapping:
         diffBValArray = []
 
         # first parse out all the slice locations, diff grad directions, and image data
-        for ds in datasets:
-            data[:,:,i] = ds.pixel_array
-            i += 1
+        for ind,ds in enumerate(datasets):
+            data[:,:,ind]=ds.pixel_array
             sliceLocsArray.append(abs(float(ds.SliceLocation)))
-            diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
-            diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
-            diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
-            #print(datasets[0][hex(int('0019',16)), hex(int('100e',16))])
+            try:
+                diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
+                diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
+                diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
+            except:
+                diffGrad_str=[1.0,0.0,0.0]
+                diffGradArray.append(diffGrad_str) 
             diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
-            #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
 
         # check mosaic
-        if 'MOSAIC' in datasets[0].ImageType:
-            print('Detected Mosaic...')
-            acqMat = np.array(datasets[0].AcquisitionMatrix)
-            acqMat = acqMat[acqMat > 0]
-            Nx = acqMat[0]
-            Ny = acqMat[1]
-            Rows = datasets[0].Rows
-            Cols = datasets[0].Columns
-            Nd = NdNz
-            data2 = np.zeros((Nx,Ny,1000,Nd)) #larger numebr of slices than needed
-            if Nx > Rows or np.mod(Rows,Nx) != 0:
-                Nx = acqMat[2]
-                Ny = acqMat[1]
-            
-            z = 0
-            for x in range(Nx,Rows,Nx):
-                for y in range(Ny,Cols,Ny):
-                    data2[:,:,z,:] = data[(x-Nx):x,(y-Ny):y,:]
-                    z = z+1
-            Nz = z-1
-            data_final = data2[:,:,0:Nz,:]
+        
+        sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
+        Nz = len(sliceLocs)
+    
+        if bFilenameSorted:
             diffBValTarget = diffBValArray
             diffGradTarget = diffGradArray
-            diffDicomHDRRange = range(Nd)
-
+            Nd = int(NdNz/Nz)
+            data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
         else:
-            sliceLocs = np.sort(np.unique(sliceLocsArray)) #all unique slice locations
-            Nz = len(sliceLocs)
-        
-            if bFilenameSorted:
-                diffBValTarget = diffBValArray
-                diffGradTarget = diffGradArray
-                Nd = int(NdNz/Nz)
-                data_final = data.reshape([Nx,Ny,Nz,Nd],order='F')
-            else:
-                # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
-                # take first slice and find the order of b-values and gradients --> this is our new order
-                # NB: Each slice could have their own order so we need to reorder each slice
-                # this is SUPER slow but at least everything is in the right order
-                print('...Trying exhausted search and sort of dicom')
-                index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
-                diffBValTarget = np.array(diffBValArray)[index]
-                diffGradTarget = np.array(diffGradArray)[index]
-                Nd = len(diffBValTarget)
+            # to avoid mismatch between reading file order -->organize slice locs and diff grad manually    
+            # take first slice and find the order of b-values and gradients --> this is our new order
+            # NB: Each slice could have their own order so we need to reorder each slice
+            # this is SUPER slow but at least everything is in the right order
+            print('...Trying exhausted search and sort of dicom')
+            index = np.array(sliceLocsArray == sliceLocs[0]*np.ones(np.array(sliceLocsArray).shape))
+            diffBValTarget = np.array(diffBValArray)[index]
+            diffGradTarget = np.array(diffGradArray)[index]
+            Nd = int(NdNz/Nz)
 
-                data_final = np.zeros((Nx,Ny,Nz,Nd))
-                data_final[:,:,0,:] = data[:,:,index]
+            data_final = np.zeros((Nx,Ny,Nz,Nd))
+            data_final[:,:,0,:] = data[:,:,index]
 
-                for z in tqdm(range(Nz)):
-                    if z == 0:
-                        continue
-                    sliceIndex = np.array(sliceLocsArray == 
-                                        sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
-                    dataSlice = data[:,:,sliceIndex]
-                    for d in range(Nd):
-                        for dd in range(Nd):
-                            if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
-                                if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
-                                    data_final[:,:,z,d] = dataSlice[:,:,dd]
-            diffDicomHDRRange = range(0,NdNz,Nz)
+            for z in tqdm(range(Nz)):
+                if z == 0:
+                    continue
+                sliceIndex = np.array(sliceLocsArray == 
+                                    sliceLocs[z]*np.ones(np.array(sliceLocsArray).shape))
+                dataSlice = data[:,:,sliceIndex]
+                for d in range(Nd):
+                    for dd in range(Nd):
+                        if diffBValTarget[d] == np.array(diffBValArray)[sliceIndex][dd]:
+                            if (diffGradTarget[d] == np.array(diffGradArray)[sliceIndex][dd]).all() :
+                                data_final[:,:,z,d] = dataSlice[:,:,dd]
+        diffDicomHDRRange = range(0,NdNz,Nz)
+
         # create numpy arrays and rotate diffusion gradients into image plane
         diffGrad = np.zeros((Nd,3))
         diffBVal = np.zeros((Nd,))
-        for d in diffDicomHDRRange:
-            dd = int(d/diffDicomHDRRange.step) #int(d/Nz)
-            diffBVal[dd] = diffBValTarget[d]
-            diffGrad[dd,0] = np.dot(xaxis, diffGradTarget[d])
-            diffGrad[dd,1] = np.dot(yaxis, diffGradTarget[d])
-            diffGrad[dd,2] = np.dot(zaxis, diffGradTarget[d])
-            diffGrad[dd,:] = diffGrad[dd,:]/np.linalg.norm(diffGrad[dd,:])
+        for d in range(Nd):
+            diffBVal[d] = diffBValTarget[d]
+            diffGrad[d,0] = np.dot(xaxis, diffGradTarget[d])
+            diffGrad[d,1] = np.dot(yaxis, diffGradTarget[d])
+            diffGrad[d,2] = np.dot(zaxis, diffGradTarget[d])
+            diffGrad[d,:] = diffGrad[d,:]/np.linalg.norm(diffGrad[d,:])
 
         return data_final, diffBVal, diffGrad, datasets
 
@@ -779,10 +779,12 @@ class mapping:
         imageio.mimsave(path, np.transpose(data,[2,0,1]), duration = 1./fps,loop=30)
     #Visualize MP:
     # visualize using plotly
-    def imshow(self, volume=None, zmin=None, zmax=None, 
+    
+    # visualize using plotly
+    def imshow_px(self, volume=None, zmin=None, zmax=None, 
                     fps=30, cmap='gray', frameHW=None):
         if volume is None:
-            volume = self._data
+            volume = self._data / np.max(self._data, axis=(0,1), keepdims=True)
         if zmin is None:
             zmin = np.min(volume[:])
         if zmax is None:
@@ -830,12 +832,14 @@ class mapping:
                                             'drawrect',
                                             'eraseshape'
                                         ]})
+  
+    
 
     def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=False,path=None):
         if volume is None:
             volume = self._data
         if path ==None:
-            path=self.path
+            path=os.path.dirname(self.path)
         if valueList==None:
             valueList=self.valueList
         if ID==None:
@@ -856,7 +860,7 @@ class mapping:
                     axs[d].imshow(volume[:,:,0,d],cmap=cmap,vmin=vmin,vmax=vmax)
                     axs[d].set_title(f'{valueList[d]}',fontsize=5)
                     axs[d].axis('off')
-            img_dir= os.path.join(os.path.dirname(path),f'{ID}')
+            img_dir= os.path.join(path,f'{ID}')
             if plot:
                 plt.savefig(img_dir,bbox_inches='tight')
         elif len(np.shape(volume))==4:
@@ -879,11 +883,11 @@ class mapping:
                     axs[z,d].axis('off')
         #plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
-            img_dir= os.path.join(os.path.dirname(path),f'{ID}')
+            img_dir= os.path.join(path,f'{ID}')
             if plot:
-                plt.savefig(img_dir)
+                plt.savefig(img_dir, bbox_inches='tight')
         return fig,axs
-    def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
+    def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=True):
         try:
             Nx,Ny,Nz=np.shape(self._map)
         except:
@@ -894,6 +898,8 @@ class mapping:
         #Generate the map color
         if ID==None:
             ID=self.ID
+        if path==None:
+            path=os.path.dirname(self.path)
         if crange==None:
             if 't2' in self.ID.lower() or 'mp02' in self.ID.lower():
                 self.crange=[0,150]
@@ -917,13 +923,13 @@ class mapping:
             axes[sl].set_axis_off()
             im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
         cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}')
+        img_dir= os.path.join(path,f'{ID}')
         if plot:
             plt.savefig(img_dir)
         plt.show()
     
     # visualize the overlay
-    def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True):
+    def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True,path=None):
         try:
             Nx,Ny,Nz=np.shape(self._map)
             sl=0
@@ -939,6 +945,8 @@ class mapping:
             cmap=self.cmap
         if ID==None:
             ID=self.ID
+        if path==None:
+            path=os.path.dirname(self.path)
         num_slice=self.Nz
         figsize = (num_slice*3, 3)
         fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True,squeeze=False)
@@ -951,8 +959,7 @@ class mapping:
             axes[sl].imshow(base_im, cmap="gray", vmax=np.max(base_im)*brightness)
             im = axes[sl].imshow(self._map[..., sl], alpha=alpha, vmin=crange[0],vmax=crange[1], cmap=cmap)
         cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
-        
-        img_dir= os.path.join(os.path.dirname(self.path),f'{self.CIRC_ID}_{ID}_overlay')
+        img_dir= os.path.join(path,f'{ID}')
         if plot:
             plt.savefig(img_dir)
         plt.show()  
@@ -1094,19 +1101,19 @@ class mapping:
 
 
     #automatically crop the data
-    def _crop_Auto(self,data=None,cropStartVx=40):
+    def _crop_Auto(self,data=None,cropStartVx=32):
         if data is None:
             data = np.copy(self._data)
         Nx,Ny,Nz,Nd=np.shape(data)
         if Nx > Ny:
-            cropWin = int(Nx/3)
+            cropWin = int(Nx/2)
             if cropStartVx is None:
                 cropStartVx = cropWin
             cropData = data[cropStartVx:(cropStartVx+cropWin),...]
         else:
             if cropStartVx is None:
                 cropStartVx = cropWin
-            cropWin = int(Ny/3)
+            cropWin = int(Ny/2)
             cropData = data[:,cropStartVx:(cropStartVx+cropWin),...]
         return cropData
 
@@ -1179,8 +1186,10 @@ class mapping:
         '''
         #Only for T1 LIST ONLY
         data_temp=np.delete(self._data,d,axis=axis)
+        data_temp_raw=np.delete(self._raw_data,d,axis=axis)
         list=np.delete(self.valueList,d).tolist()
         self.valueList=list
+        self._raw_data=data_temp_raw
         self._data=data_temp
         self._update()
     
@@ -1443,12 +1452,94 @@ class mapping:
                 raise Exception('only supports 3, 6, 10, 12 30 ... ask chris to offer more')
         else:
             raise Exception('sorry only implemented Siemens grad table for now')
+    
+    
+    def go_calc_MD(self,  bFastOLS=False, bNumba=False):
+        '''
+        Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
+        '''
+        print('Calculating diffusion tensor for data: ')
 
+        #first unwrap everything for faster calculation using Numba
+        G = self.bvec
+        bval = self.bval
+        self.b_matrix = -1 * np.array([
+                G[:,0]*G[:,0]*bval,  #    Bxx
+                G[:,1]*G[:,1]*bval, #     Byy
+                G[:,2]*G[:,2]*bval, #     Bzz
+                G[:,0]*G[:,1]*2*bval, #   Bxy
+                G[:,0]*G[:,2]*2*bval, #   Bxz
+                G[:,1]*G[:,2]*2*bval, #   Byz
+                np.ones(G[:,0].shape) # S0
+            ]).T
+        NxNyNz = self.Nx*self.Ny*self.Nz
+
+        tensor, eval, evec = calctensor(self._data.reshape([NxNyNz, self.Nd]), 
+                                        self.b_matrix,
+                                        bFastOLS=bFastOLS) 
+        eval[eval<0] = 1e-10 # do this after numba fcn since it was supported
+        
+        # wrap everything back up
+        self.tensor = tensor.reshape([self.Nx,self.Ny,self.Nz,6])
+        self.eval = eval.reshape([self.Nx,self.Ny,self.Nz,3])
+        self.evec = evec.reshape([self.Nx,self.Ny,self.Nz,3,3]) # [Nx,Ny,Nz,xyz,p1p2p3]
+        #temp = np.copy(self.evec[:,:,:,1,:]) #blue and green are transposed
+        #self.evec[:,:,:,1,:] = self.evec[:,:,:,2,:] 
+        #self.evec[:,:,:,2,:] = temp
+
+        # calculate diffusion parametric maps
+        self.md = np.mean(self.eval,axis=3)
+
+        
 
 
 #########################################################################################
 # Helper functions -- NOT a class function accessible by the object
 #########################################################################################
+def calctensor(data, b_matrix, bFastOLS=False):
+    NxNyNz = data.shape[0]
+    S = np.zeros((data.shape[1],), dtype=np.float64)
+    logS = np.zeros((data.shape[1],), dtype=np.float64)
+    tensor_map = np.zeros((NxNyNz,6), dtype=np.float64)
+    eval_map = np.zeros((NxNyNz,3), dtype=np.float64)
+    evec_map = np.zeros((NxNyNz,3,3), dtype=np.float64)
+    evec = np.zeros((3,3), dtype=np.float64)
+    eval = np.zeros((3,), dtype=np.float64)
+    D = np.zeros((7,), dtype=np.float64)
+
+    A_pinv = np.linalg.pinv(b_matrix)
+    for i in tqdm(range(NxNyNz)):
+    #for i in range(NxNyNz):
+        S = np.abs(data[i,:])
+        S[S==0] = 1
+        logS = np.log(S)
+        if bFastOLS:
+            D = np.dot(A_pinv, logS)
+        else:
+            # remove rcond=None if using numba
+            #D = np.linalg.lstsq(b_matrix, logS, rcond=None)[0] 
+            [Q,R] = np.linalg.qr(b_matrix)
+            R = R[:,0:b_matrix.shape[0]]
+            D = np.linalg.inv(R).dot(Q.T.dot(logS))
+        D[np.isnan(D)] = 0.0
+        D[np.isinf(D)] = 0.0
+        #D = b_matrix \ logS; %LU decomposition
+        tensor_map[i,:] = D[0:6]
+        #numba only supports 'no domain change'
+        # so we need to cast as complex and then strip real later
+        D_mat = np.array([[D[0], D[3], D[4]],
+                        [D[3], D[1], D[5]],
+                        [D[4], D[5], D[2]]], dtype=np.complex128)
+        eval, evec = np.linalg.eigh(D_mat) 
+        eval = eval.real
+        evec = evec.real
+        eval[eval < 0] = 1e-16
+        ind = np.argsort(eval)
+        eval_map[i,:] = eval[ind[::-1]] 
+        evec_map[i,:,:] = evec[:,ind[::-1]]
+    return tensor_map, eval_map, evec_map    
+
+
 
 #TODO      
 #Make a weighted least square fit
@@ -1491,13 +1582,12 @@ def sub_ir_fit_lm(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error=
     return T1_exp,ra_exp,rb_exp,res,ydata_exp
 
 def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
-    ###From rdNlsPr from qmrlab
+    ###From rdNlsPr in qmrlab
     if np.size(data) != np.size(TIlist):
         return
     data_ori=data
     T1Start = T1bound[0]
     T1Stop= T1bound[1]
-    #If Zoom it could be different, by default it's 1
     TIarray=np.array(TIlist)
     T1Vec = np.matrix(np.arange(T1Start, T1Stop+1, 1, dtype=float))
     Nlen=np.size(TIarray)
@@ -1521,6 +1611,7 @@ def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
     res=1. / np.sqrt(n) * np.sqrt(np.power(1 - ydata_exp / data_ori.T, 2).sum())
 
     return T1_exp,ra_exp,rb_exp,res,ydata_exp
+
 
 def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2,searchtype='grid',
             T1bound=[1,5000],invertPoint=4):
@@ -1585,7 +1676,7 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     return T1_final,ra_final,rb_final,resTmps,resTmps[returnInd]
 
 #Only work in size 1, please write for loop if you want it to be in multiple slice
-def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
+def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
     try:
         Nx,Ny,Nd=np.shape(data)
     except:
@@ -1612,7 +1703,12 @@ def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS'
                 finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
             T1bound=T1bound,invertPoint=invertPoint)
     return finalMap,finalRa,finalRb,finalRes
+
+
+
 def go_ir_fit_parrllel(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4,core=5):
+    ##This is the function to run go ir fit in parallel. But the computer has issue in CPU, might try naive way instead.
+
     from multiprocessing import Pool
     from functools import partial
     try:
@@ -1646,6 +1742,59 @@ def go_ir_fit_parrllel(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,t
     RaMap=np.reshape(finalRa,(Nx,Ny,Nz))
     RbMap=np.reshape(finalRb,(Nx,Ny,Nz))
     return T1Map,RaMap,RbMap,Res
+
+#Define the T2 recovery
+def T2_recovery(tVec,T2,M0):
+    #Spin Echo recovery, assuming infinite recovery time
+    #Equation: fT2 = @(a)(a(1)*exp(-xData/a(2)) - yDat);
+    tVec=np.array(tVec)
+    return M0*np.exp(-tVec/T2)
+
+#Single point t2 fit with exp
+def sub_mono_t2_fit_exp(ydata,xdata):
+    xdata=np.array(xdata)
+    ydata=np.array(ydata)
+    ydata=abs(ydata)
+    ydata=ydata/np.max(ydata)
+
+    t2Init_dif = xdata[0] - xdata[-1]
+    try:
+        t2Init = t2Init_dif/np.log(ydata[-1]/ydata[0])
+        if t2Init<=0:
+            t2Init=30
+    except:
+        t2Init=30
+    pdInit=np.max(ydata)*1.5
+    params_OLS,params_covariance= curve_fit(T2_recovery,xdata,ydata,method='lm',p0=[t2Init,pdInit],maxfev=5000)
+    T2_exp,Mz_exp=params_OLS
+    ydata_exp=T2_recovery(xdata,T2_exp,Mz_exp)
+    n=len(xdata)
+    res=1. / np.sqrt(n) * np.sqrt(np.power(1 - ydata_exp / xdata.T, 2).sum())
+    return T2_exp,Mz_exp,res,ydata_exp
+
+def go_t2_fit(data=None,TElist=None,Mz=None,T2=None,method='exp'):
+    try:
+        Nx,Ny,Nd=np.shape(data)
+    except:
+        Nx,Ny,Nz,Nd=np.shape(data)
+    if len(np.shape(data))==3 or Nz==1:
+        NxNy=int(Nx*Ny)
+        finalMap=np.zeros((Nx,Ny,1))
+        finalMz=np.zeros((Nx,Ny,1))
+        finalRes=np.zeros((Nx,Ny,1))
+    elif len(np.shape(data))==4:
+        Nx,Ny,Nz,Nd=np.shape(data)
+        finalMap=np.zeros((Nx,Ny,Nz))
+        finalMz=np.zeros((Nx,Ny,Nz))
+        finalRes=np.zeros((Nx,Ny,Nz))
+        NxNy=int(Nx*Ny)
+    dataTmp=np.copy(data)
+    for z in tqdm(range(Nz)):
+
+        for x in range(Nx):
+            for y in range(Nz):
+                finalMap[x,y,z],finalMz[x,y,z],finalRes[x,y,z],_=sub_mono_t2_fit_exp(ydata=dataTmp,xdata=TElist)
+    return finalMap,finalMz,finalRes
 
 def moco(data,obj,valueList=None,target_ind=0):
     if valueList==None:

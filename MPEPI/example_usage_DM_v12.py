@@ -17,12 +17,20 @@ import warnings #we know deprecation may show bc we are using a stable older ITK
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
 plt.rcParams['savefig.dpi'] = 300
+plot=False
+loadOld=False
+
+
 # %%
-CIRC_ID='CIRC_00325'
-dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
+CIRC_ID='CIRC_00438'
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI_Z')
 ID = os.path.dirname(dicomPath).split('\\')[-1]
-MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,sortBy='seriesNumber')
-#MP03 = mapping(data=r'C:\Research\MRI\MP_EPI\CIRC_00356_22737_CIRC_00356_22737\MP03_DWI_p.mapping')
+
+mapPath=rf'{dicomPath}_p.mapping'
+if os.path.exists(mapPath) and loadOld:
+    MP03 = mapping(data=rf'{dicomPath}_p.mapping')
+else:
+    MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,sortBy='seriesNumber',reject=False)
 # %%
 #Motion correction
 MP03.go_crop()
@@ -33,9 +41,14 @@ cropzone=MP03.cropzone
 # %%
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP01_T1')
 #CIRC_ID='CIRC_00302'
-
 ID = os.path.dirname(dicomPath).split('\\')[-1]
-MP01 = mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327)
+
+mapPath=rf'{dicomPath}_p.mapping'
+if os.path.exists(mapPath) and loadOld:
+    MP01 = mapping(data=rf'{dicomPath}_p.mapping')
+else:
+    MP01 = mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327)
+#%%
 MP01.cropzone=cropzone
 MP01.go_crop()
 MP01.go_resize(scale=2)
@@ -64,9 +77,15 @@ fig,axs=MP01.imshow_corrected(ID='MP01_T1_Truncated_2')
 # %%
 #Read MP02
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP02_T2')
-MP02 = mapping(data=dicomPath,CIRC_ID=CIRC_ID)
+
+mapPath=rf'{dicomPath}_p.mapping'
+if os.path.exists(mapPath) and loadOld:
+    MP02 = mapping(data=rf'{dicomPath}_p.mapping')
+else:
+    MP02 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False)
+#%%
 MP02.cropzone=cropzone
-# %%
+
 MP02.go_crop()
 MP02.go_resize(scale=2)
 MP02.go_moco()
@@ -142,6 +161,29 @@ map_data=map_data['T2']
 MP02._map= map_data
 MP02.imshow_map()
 #%%
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP01_T1_post')
+#CIRC_ID='CIRC_00302'
+
+ID = os.path.dirname(dicomPath).split('\\')[-1]
+MP01_post = mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327)
+MP01_post.cropzone=cropzone
+MP01_post.go_crop()
+MP01_post.go_resize(scale=2)
+fig,axs=MP01_post.imshow_corrected(ID='MP01_T1_post_raw')
+MP01_post.go_moco()
+fig,axs=MP01_post.imshow_corrected(ID='MP01_T1_post_moco')
+
+#%%
+MP01_post._save_nib()
+print(f'MP01_post:{MP01_post.valueList}')
+
+#%%
+path=os.path.dirname(dicomPath)
+map_data=sio.loadmat(os.path.join(path,'MP01_T1_post.mat'))
+map_data=map_data['T1']
+MP01_post._map= map_data
+MP01_post.imshow_map()
+
 # %%
 #%matplotlib qt <--- you need this if you haven't turned it on in vscode
 MP03.go_segment_LV(reject=None, image_type="b0")

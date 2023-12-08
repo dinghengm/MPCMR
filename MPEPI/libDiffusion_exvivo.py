@@ -10,23 +10,14 @@
 #
 # INSTALLATION PACKAGES PREREQ
 # install anaconda first
-###Try
-#conda install -c anaconda python=3.8
-# conda install -c conda-forge numpy==1.21.6
-#conda install scipy==1.6.2
-# conda install -c tensorly tensorly
-#conda install -c conda-forge pydicom
-#conda install -c conda-forge imageio
-# conda install tqdm <--should already be there
-# conda install -c simpleitk simpleitk
-#conda install -c anaconda openpyxl
-# conda install -c anaconda scikit-image
-#conda install -c plotly plotly
-#conda install -c conda-forge opencv
-#conda install -c anaconda statsmodels
-#conda install -c conda-forge nbformat
+#
 # pip install roipoly
-
+# pip install SimpleITK-SimpleElastix
+# pip install imgbasics
+# conda install tqdm <--should already be there
+# pip install ipyfilechooser
+# pip install opencv-python
+# python -m pip install statsmodels
 
 # %%
 import numpy as np
@@ -115,6 +106,7 @@ class diffusion:
                 data, bval, bvec, datasets = self.dicomread(data, bFilenameSorted=bFilenameSorted)
                 self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
                 self.path = tmp
+
         else:
             self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
         # this is junk code needed to initialize to allow for the interactive code to work
@@ -161,7 +153,7 @@ class diffusion:
             self.dcm_list = datasets
             if self.ID == None:
                 self.ID = self.dcm_list[0].PatientID
-            
+
             if bval == []:
                 self.bval = np.concatenate((np.zeros(1),
                                         np.ones(Nd)*500)) #default b = 500
@@ -170,8 +162,7 @@ class diffusion:
 
             if bvec == []:
                 self.bvec = np.concatenate((np.zeros([1,3]),
-                                        self._getGradTable(12))) #default b = 500
-            
+                                        self._getGradTable(Nd))) #default b = 500
             else:
                 self.bvec = bvec
                 # swap x and y if phase encode is LR
@@ -185,7 +176,7 @@ class diffusion:
                 #        temp = np.copy(self.bvec[:,0])
                 #        self.bvec[:,0] = self.bvec[:,1]
                 #        self.bvec[:,1] = temp
-            
+
 
             
             self.mask_endo = []
@@ -831,10 +822,13 @@ class diffusion:
     def dicomread(self, dirpath='.', bFilenameSorted=True):
         # print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
-        dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
-        if dicom_filelist == []:
-            dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.DCM')
-        datasets = [pydicom.dcmread(os.path.join(dirpath, file))
+        dicom_filelist=[]
+        for dirpath,dirs,files in  os.walk(dirpath):
+            for x in files:
+                path=os.path.join(dirpath,x)
+                if path.endswith('dcm') or path.endswith('DCM'):
+                    dicom_filelist.append(path)
+        datasets = [pydicom.dcmread(path)
                                 for file in tqdm(dicom_filelist)]
         
         i = 0
@@ -854,21 +848,13 @@ class diffusion:
             data[:,:,i] = ds.pixel_array
             i += 1
             sliceLocsArray.append(float(ds.SliceLocation))
-            try:
-
-                diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
-                diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
-            except:
-                diffGrad_str_array=np.array([1,0,0])
+            diffGrad_str = ds[hex(int('0019',16)), hex(int('100e',16))].repval
+            diffGrad_str_array = diffGrad_str.split('[')[1].split(']')[0].split(',')
             diffGradArray.append([float(temp) for temp in diffGrad_str_array]) 
-            
             #print(datasets[0][hex(int('0019',16)), hex(int('100e',16))])
             diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
-
-
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
-
         # check mosaic
         if 'MOSAIC' in datasets[0].ImageType:
             print('Detected Mosaic...')

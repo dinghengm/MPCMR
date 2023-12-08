@@ -16,7 +16,8 @@
 # pip install imgbasics
 # conda install tqdm <--should already be there
 # pip install ipyfilechooser
-#
+# pip install opencv-python
+# python -m pip install statsmodels
 
 # %%
 import numpy as np
@@ -45,6 +46,7 @@ import pickle # to save diffusion object
 import fnmatch # this is for string comparison dicomread
 import pandas as pd
 from skimage.transform import resize as imresize
+import statsmodels.api as sm
 
 try:
     from numba import njit #super fast C-like calculation
@@ -94,8 +96,16 @@ class diffusion:
             #bvec = self._bvec
 
         if type(data) == str: #given a path so try to load in the data
-            data, bval, bvec,datasets = self.dicomread(dirpath=data, bFilenameSorted=bFilenameSorted)
-            self.__initialize_parameters(data=data,bval=bval,bvec=bvec,datasets=datasets)
+            tmp = data
+            
+            if tmp.split('.')[-1] == 'diffusion':
+                print('Loading in CIRC diffusion object')
+                self._load(filename=tmp)                    
+            
+            else:
+                data, bval, bvec, datasets = self.dicomread(data, bFilenameSorted=bFilenameSorted)
+                self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
+                self.path = tmp
 
         # this is junk code needed to initialize to allow for the interactive code to work
         # TO DO: 
@@ -169,7 +179,7 @@ class diffusion:
             
             self.mask_endo = []
             self.mask_epi = []
-            self.lv = []
+            self.mask_lv = []
             self.mask_septal = []
             self.mask_lateral = []
             self.CoM = []
@@ -197,12 +207,12 @@ class diffusion:
 # ========================================================================================================
         
     # crop class method
-    def go_crop(self):
+    def go_crop(self, crop_data=None):
         '''
         Click top left and bottom right corners on pop-up window to crop
         '''
-        print('Staring croping of diffusion data')
-        self._data, self.cropzone = self._crop()
+        print('Cropping of data:')
+        self._data, self.cropzone = self._crop(data=crop_data)
         self.Nx = self._data.shape[0]
         self.Ny = self._data.shape[1]
         self.shape = self._data.shape
@@ -216,10 +226,11 @@ class diffusion:
             * scale: images will be resized to scale * (Nx, Ny)
             * newshape: tuple(Nx_new, Ny_new) images will be resized to (Nx_new, Ny_new)
         '''
+        print('Resizing of data:')
         if newshape == None:
             newshape = scale*np.array([self.Nx, self.Ny])
-        self.Nx = newshape[0]
-        self.Ny = newshape[1]
+        self.Nx = int(newshape[0])
+        self.Ny = int(newshape[1])
         self._data = self._resize()
 
     # motion correct class method
@@ -232,10 +243,15 @@ class diffusion:
             * rank_diff: for lrt correction, default=1
             * rank_diff_resp: for lrt correction, default=2 
         '''
-        print('Starting motion correction of diffusion data: ')
+        print('Motion correction of data: ')
         if method == 'lrt':
             print(' ... Performing low rank tensor motion correction')
+            
+            # copy and normalize data
+            max_val = np.max(self._data, axis=(0, 1), keepdims=True)
+            self._data = self._data / max_val
             self._data_regress = np.copy(self._data)
+            
             #define ranks
             for z in tqdm(range(self.Nz)):
                 print(' ...... Slice '+str(z), end='')
@@ -284,7 +300,9 @@ class diffusion:
                     self._data[:,:,z,:] = self._coregister_elastix(data=data_diff_regress, 
                                                                    orig_data=self._data[:,:,z,:])
                 #print(' ......... ' + str(toc(t)))
-            
+                
+            self._data = self._data * max_val
+                
         elif method == 'naive':
             print(' ... Performing naive motion correction')
             #define ranks
@@ -302,11 +320,13 @@ class diffusion:
                 else:
                     self._data[:,:,z,:] = self._coregister_elastix(data=data)
                 #print(' ......... ' + str(toc(t)))
-    
+
+        
+        
 
     # denoising class method
     def go_denoise(self, method='tv', weight=0.1, wavelt_rescale_sigma=True, lrt_rk=None):
-        print('Starting denoising of diffusion data: ')
+        print('Denoising of data: ')
         if method == 'tv':
             print(' ... Performing TV denoising')
             for z in tqdm(range(self.Nz)):
@@ -333,7 +353,7 @@ class diffusion:
         '''
         Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
         '''
-        print('Starting calculation of diffusion tensor for diffusion data: ')
+        print('Calculating diffusion tensor for data: ')
 
         #first unwrap everything for faster calculation using Numba
         G = self.bvec
@@ -639,8 +659,7 @@ class diffusion:
                 self.mask_epi_HAT[..., z] = multirois.rois['epi'].get_mask(image)
             self.mask_lv_HAT[..., z] = self.mask_epi_HAT[..., z]^self.mask_endo_HAT[..., z]
             
-       
-
+                
     def go_define_CoM(self):
         '''
         Double click to define the COM for each slice
@@ -648,8 +667,7 @@ class diffusion:
         print('Define CoM for quick HA estimate')
         self.CoM = [None]*self.Nz
         for z in range(self.Nz):
-            #image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1) #self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
-            image=self._data[:,:,z,0]
+            image = np.mean(self._data[:,:,z,np.argwhere(self.bval==50).ravel()], axis=-1) #self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
             fig = plt.figure()
             plt.imshow(image, cmap='gray', vmax=np.max(image)*0.6)
             plt.title('Slice '+ str(z) + ", Double Click Center")
@@ -689,6 +707,7 @@ class diffusion:
             print('Failed saving!!!!')
 
 
+    # calculate the diffusion parameters for LV
     def show_calc_stats_LV(self):
         '''
         Print gloabl LV MD and LV FA values
@@ -795,6 +814,8 @@ class diffusion:
         
         # except:
             # print('Failed export!!!')
+
+
     # read in dicoms
     def dicomread(self, dirpath='.', bFilenameSorted=True):
         # print('Path to the DICOM directory: {}'.format(dirpath))
@@ -923,7 +944,7 @@ class diffusion:
     def imshow(self, volume=None, zmin=None, zmax=None, 
                     fps=30, cmap='gray', frameHW=None):
         if volume is None:
-            volume = self._data
+            volume = self._data / np.max(self._data, axis=(0,1), keepdims=True)
         if zmin is None:
             zmin = np.min(volume[:])
         if zmax is None:
@@ -944,7 +965,6 @@ class diffusion:
                                 facet_col=2, 
                                 facet_col_wrap=np.min([volume.shape[2],3]), 
                                 facet_col_spacing=0.01,
-                                facet_row_spacing=0.01,
                                 binary_string=False,
                                 color_continuous_scale=cmap,
                                 template='plotly_dark',
@@ -990,16 +1010,16 @@ class diffusion:
         colFA[...,1] = temp
 
         fig1 = px.imshow(md, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,facet_row_spacing=0.01, template='plotly_dark',
+                         facet_col_spacing=0.01, template='plotly_dark',
                          color_continuous_scale='hot', zmin=0, zmax=0.003)
         fig2 = px.imshow(fa, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,facet_row_spacing=0.01,template='plotly_dark',
+                         facet_col_spacing=0.01,template='plotly_dark',
                          color_continuous_scale='dense', zmin=0, zmax=0.5)
         fig3 = px.imshow(ha, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,facet_row_spacing=0.01,template='plotly_dark',
+                         facet_col_spacing=0.01,template='plotly_dark',
                          color_continuous_scale='jet', zmin=-90, zmax=90)
         fig4 = px.imshow(colFA, facet_col=2, facet_col_wrap=np.min([md.shape[2],3]), 
-                         facet_col_spacing=0.01,facet_row_spacing=0.01, template='plotly_dark')
+                         facet_col_spacing=0.01, template='plotly_dark')
 
         fig1.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
         fig2.update_layout(margin={'t':0,'b':0,'r':0,'l':0,'pad':0})
@@ -1034,6 +1054,44 @@ class diffusion:
         plt.imshow(map*mask, cmap=cmap)
 
 
+    def check_segmentation(self, z=-1):
+        
+        if z==-1:   # look at all slices
+            slices = np.arange(self.Nz)
+        
+        else:
+            if type(z) == list:
+                slices = z
+            
+            if type(z) == int:
+                slices = [z]
+        
+        for sl in slices:
+            
+            alpha = 1.0*self.mask_lv[..., sl]
+
+            print(f"Slice {sl}")
+            # HA map and overlay
+            figsize = (4, 2)
+            fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize, constrained_layout=True)
+
+            # HA
+            vmin = -90
+            vmax = 90
+            axes[0].set_axis_off()
+            im = axes[0].imshow(self.ha[..., sl], vmin=vmin, vmax=vmax, cmap="jet")
+
+            # HA overlay
+            b50_inds = np.argwhere(self.bval == 50).ravel()
+            base_im = np.mean(self._data[:, :, sl, b50_inds], axis=-1)
+            # base_im = dti._data[:, :, sl, b50_inds[0]]
+            brt = 0.6
+            axes[1].set_axis_off()
+            axes[1].imshow(base_im, vmax=np.max(base_im)*brt, cmap="gray")
+            im = axes[1].imshow(self.ha[..., sl], alpha=alpha, vmin=vmin, vmax=vmax, cmap="jet", interpolation=None)
+
+            plt.show() 
+            
 # ========================================================================================================
 # "PRIVATE" CLASS FUNCTIONS ==============================================================================
 # ========================================================================================================
@@ -1072,8 +1130,6 @@ class diffusion:
         #print(fc.selected_path)
         #print(fc.selected_filename)
         #print(fc.selected)
-
-        
         
         fc.default_path = path # 
         fc.default_filename = 'test.dat'
@@ -1128,22 +1184,17 @@ class diffusion:
             data = np.copy(self._data)
         
         if cropzone is None:
-            if self.cropzone == []:
-                if self.Nz == 1:
-                    Nx, Ny, Nd = data.shape
-                    img_crop, cropzone = imcrop(np.sum(data, axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nd)
-                else:
-                    Nx, Ny, Nz, Nd = data.shape
-                    img_crop, cropzone = imcrop(np.sum(np.sum(data, axis=2), axis=2))
-                    Nx, Ny = img_crop.shape
-                    shape = (Nx, Ny, Nz, Nd)
+            if self.Nz == 1:
+                Nx, Ny, Nd = data.shape
+                img_crop, cropzone = imcrop(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nd)
             else:
-                cropzone = self.cropzone
-                temp = imcrop(data[:,:,0,0], cropzone)
-                shape = (temp.shape[0], temp.shape[1], data.shape[2], data.shape[3])
-            
+                Nx, Ny, Nz, Nd = data.shape
+                img_crop, cropzone = imcrop(np.sum(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nz, Nd)
+
         # apply crop
         data_crop = np.zeros(shape) #use updated shape
         
@@ -1491,7 +1542,6 @@ def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
                 ha_map[x,y,z] = HA
     return ha_map
 
-    
 
 def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
     Nx, Ny, Nz = ha.shape
@@ -1633,7 +1683,6 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
                     
     return HAT_perslice    
         
-
 
 
 
