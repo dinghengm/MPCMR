@@ -412,26 +412,166 @@ class mapping:
             self._data = tl.tucker_to_tensor((core, factors))
 
 
+    #Calculate ADC method 2
+    def go_cal_MD(self,bFilenameSorted=True,ADCInit=None):
+        def ADC_exp(bval,D,M0):
+            bvalVec=np.array(bval)
+            return M0*np.exp(-bvalVec*D)
+        print("Starting calculation of ADC")
+        Nx,Ny,Nz,Nd=np.shape(self._data)
+        NxNyNz=Nx*Ny*Nz
+        data=np.reshape((self._data),(NxNyNz,Nd))
+        #With b50 and b500 pair 
+        #Go over all b50/b500:
+        #Get index for the same bvec
+        bval=self.bval
+        #The number of bval, supposed to be 3
+        Nbval=np.shape(bval[bval==50])[0]
+        #Calculate all adc maps with different bvec
+        ADC_temp=np.zeros((NxNyNz,Nbval),dtype=np.float64)
+        if ADCInit==None:
+            ADCInit=1.5e-3
+        #Go through every points:
+        for i in tqdm(range(NxNyNz)):
+            S=abs(data[i,:])
+            S[S==0] = 1
+            #Go through every bvals, supposed to be 3
+            for j in range(Nbval):
+                #Go through the same bvec, 0,3,6,xxx, 1,4,7,xxx 2,5,xxx
+                ind=np.arange(j,Nd,Nbval)
+                xdata=bval[ind]
+                ydata=S[ind]
+                pdInit=np.max(ydata)*1.5
+                try:
+                    params_OLS,params_covariance= curve_fit(ADC_exp,xdata,ydata,method='lm',p0=[ADCInit,pdInit],maxfev=5000)
+                    ADC_temp[i,j]=params_OLS[0]
+                except:
+                    ADC_temp[i,j]=np.NaN
+        ADC_temp[np.isnan(ADC_temp)] = 0.0
+        ADC_temp[np.isinf(ADC_temp)] = 0.0
+        ADC_temp[ADC_temp < 0] = 1e-16
+        #S50=np.cbrt(S50)
+        #S500=self._data[...,-1]*self._data[...,-2]*self._data[...,-3]
+        #S500=np.cbrt(S500)
+        ADC_final=np.reshape(ADC_temp,(Nx,Ny,Nz,Nbval),order='F')
+        ADCmap=np.mean(ADC_final,axis=-1)
+        self.MD=ADCmap*1000
+        return ADCmap*1000
+    
     #Calculate ADC method
     #Only apply it one average will be replace later
     def go_cal_ADC(self):
         #Assume the first 3 is b50, the later 3 is b500
         print("Starting calculation of ADC")
-        ADC_temp=np.zeros((self.Nx,self.Ny,self.Nz,3))
-        S50=np.zeros((self.Nx,self.Ny))
-        S500=np.zeros((self.Nx,self.Ny))
-        for z in range(self.Nz):
-            for d in range(int(self.Nd/2)):
-                S50= self._data[...,z,d]
-                S500= self._data[...,z,d+3]
-                ADC_temp[:,:,z,d]=-1/450 * np.log(S500/S50)
+        Nx,Ny,Nz,Nd=np.shape(self._data)
+        NxNyNz=Nx*Ny*Nz
+        data=self._data
+        #With b50 and b500 pair 
+        #Go over all b50/b500:
+        #Get index for the same bvec
+        bval=self.bval
+        #The number of bval, supposed to be 3
+        Nbval=np.shape(bval[bval==50])[0]
+        #Calculate all adc maps with different bvec
+        S50=np.zeros((Nx,Ny,Nz,Nbval))
+        S500=np.zeros((Nx,Ny,Nz,Nbval))
+        ADC_temp=np.zeros((Nx,Ny,Nz,Nbval))
+        #Go through the same bvec, 0,3,6,xxx, 1,4,7,xxx 2,5,xxx
+        #If 1 ave: then S500 is single value
+        #If more than 1 ave: then S500 is the average of S50 
+        if Nd==6:
+            for j in range(Nbval):
+                S50[:,:,:,j]=data[:,:,:,j]
+                S500[:,:,:,j]=data[:,:,:,j+3]
+        else:
+            for j in range(Nbval):
+                S50[:,:,:,j]=data[:,:,:,j]
+                ind=np.arange(j,Nd,Nbval)[1::]
+                print('The b500 index:',ind)
+                #Go through all the b500
+                #Averaging all b500
+                S500[:,:,:,j]=np.mean(data[:,:,:,ind],axis=-1)
+        for z in tqdm(range(self.Nz)):
+            for d in range(Nbval):
+                ADC_temp[:,:,z,d]=-1/450 * np.log(S500[:,:,z,d]/S50[:,:,z,d])
         #S50=np.cbrt(S50)
         #S500=self._data[...,-1]*self._data[...,-2]*self._data[...,-3]
         #S500=np.cbrt(S500)
+        ADC_temp[np.isnan(ADC_temp)] = 0.0
+        ADC_temp[np.isinf(ADC_temp)] = 0.0
+        ADC_temp[ADC_temp==0]=1e-10
         ADCmap=np.zeros((self.Nx,self.Ny,self.Nz))
         ADCmap=np.mean(ADC_temp,axis=-1)
-        self.ADC=ADCmap
-        return ADCmap
+        self.ADC=ADCmap*1000
+        self._map=self.ADC
+        return ADCmap*1000
+
+        
+    #Only work in size 1, please write for loop if you want it to be in multiple slice
+    def go_ir_fit(self,data=None,TIlist=None,ra=1,rb=-2,T1=1200,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
+        if data is None:
+            data=self._data
+        if TIlist is None:
+            TIlist=self.valueList
+        try:
+            Nx,Ny,Nd=np.shape(data)
+        except:
+            Nx,Ny,Nz,Nd=np.shape(data)
+        if len(np.shape(data))==3 or Nz==1:
+            NxNy=int(Nx*Ny)
+            finalMap=np.zeros((Nx,Ny,1))
+            finalRa=np.zeros((Nx,Ny,1))
+            finalRb=np.zeros((Nx,Ny,1))
+            finalRes=np.zeros((Nx,Ny,1))
+        elif len(np.shape(data))==4:
+            Nx,Ny,Nz,Nd=np.shape(data)
+            finalMap=np.zeros((Nx,Ny,Nz))
+            finalRa=np.zeros((Nx,Ny,Nz))
+            finalRb=np.zeros((Nx,Ny,Nz))
+            finalRes=np.zeros((Nx,Ny,Nz))
+            NxNy=int(Nx*Ny)
+        #Calculate all slices
+        dataTmp=np.copy(data)
+        for z in tqdm(range(Nz)):
+            
+            for x in range(Nx):
+                for y in range(Ny):
+                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
+                T1bound=T1bound,invertPoint=invertPoint)
+        self._map=finalMap
+        return finalMap,finalRa,finalRb,finalRes
+
+        
+    def go_t2_fit(self,data=None,TElist=None,Mz=None,T2=None,method='exp'):
+        if data is None:
+            data=self._data
+        if TElist is None:
+            TElist=self.valueList
+        try:
+            Nx,Ny,Nd=np.shape(data)
+        except:
+            Nx,Ny,Nz,Nd=np.shape(data)
+        if len(np.shape(data))==3 or Nz==1:
+            NxNy=int(Nx*Ny)
+            finalMap=np.zeros((Nx,Ny,1))
+            finalMz=np.zeros((Nx,Ny,1))
+            finalRes=np.zeros((Nx,Ny,1))
+        elif len(np.shape(data))==4:
+            Nx,Ny,Nz,Nd=np.shape(data)
+            finalMap=np.zeros((Nx,Ny,Nz))
+            finalMz=np.zeros((Nx,Ny,Nz))
+            finalRes=np.zeros((Nx,Ny,Nz))
+            NxNy=int(Nx*Ny)
+        dataTmp=np.copy(data)
+        for z in tqdm(range(Nz)):
+            for x in range(Nx):
+                for y in range(Ny):
+                    finalMap[x,y,z],finalMz[x,y,z],finalRes[x,y,z],_=sub_mono_t2_fit_exp(ydata=dataTmp[x,y,z,:],xdata=TElist)
+        finalMap[np.isnan(finalMap)] = 0.0
+        finalMap[np.isinf(finalMap)] = 0.0
+        finalMap[finalMap==0]=1e-10
+        self._map=finalMap
+        return finalMap,finalMz,finalRes
 
 
 
@@ -466,7 +606,7 @@ class mapping:
         # you will need to use this decorator to make this work --> %matplotlib qt
         print('Segment of the LV')
         data=self._data
-        if crange==None:
+        if crange is None:
             crange=[np.min(data),np.max(data)]
         if z == -1: #new ROI
             self.mask_endo = np.full((data).shape[:3], False, dtype=bool) # [None]*self.Nz
@@ -530,23 +670,31 @@ class mapping:
 
             plt.close()
     
-    def go_create_GIF(path=None,CIRC_ID=None,ID=None,data=None):
-        if data == None:
+    def go_create_GIF(self,path_dir=None,CIRC_ID=None,ID=None,data=None):
+        if data is None:
             data=self._data
-        if path==None:
-            path=self.path
-        if CIRC_ID==None:
+        if path_dir is None:
+            path_dir=os.path.dirname(self.path)
+        if CIRC_ID is None:
             CIRC_ID=self.CIRC_ID
-        if ID==None:
+        if ID is None:
             ID=self.ID
+        Nz=self.Nz
+        img_dir= os.path.join(path_dir,f'{CIRC_ID}_{ID}_moco_.gif')
+        if Nz==1:
+            A2=np.copy(data)
+            Nz=np.shape(A2)[2]
+            A2 = data/np.max(data)*255
+            self.createGIF(img_dir,A2.squeeze(),fps=5)
+        else:
+            A2=np.copy(data)
+            Nz=np.shape(A2)[2]
+            for i in range(Nz):
+                A2[:,:,i,:] = data[...,i,:]/np.max(data[...,i,:])*255
+            A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+            self.createGIF(img_dir,A3,fps=5)
 
-        A2=np.copy(data)
-        Nz=np.shape(A2)[2]
-        for i in range(Nz):
-            A2[:,:,i,:] = data[...,i,:]/np.max(data[...,i,:])*255
-        A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
-        img_dir= os.path.join(os.path.dirname(path),f'{CIRC_ID}_{ID}_moco_.gif')
-        self.createGIF(img_dir,A3,fps=5)
+        print(f'Create GIF in {img_dir}')
 
 
 
@@ -763,7 +911,7 @@ class mapping:
             diffGrad[d,2] = np.dot(zaxis, diffGradTarget[d])
             diffGrad[d,:] = diffGrad[d,:]/np.linalg.norm(diffGrad[d,:])
 
-        return data_final, diffBVal, diffGrad, datasets
+        return data_final, diffBVal, diffGrad, dicom_filelist
 
 
     # create a gif from the data
@@ -838,36 +986,40 @@ class mapping:
     def imshow_corrected(self,volume=None,valueList=None,ID=None,vmin=None, vmax=None,cmap='gray',plot=False,path=None):
         if volume is None:
             volume = self._data
-        if path ==None:
+        if path is None:
             path=os.path.dirname(self.path)
-        if valueList==None:
+        if valueList is None:
             valueList=self.valueList
-        if ID==None:
+        if ID is None:
             ID=self.ID
         try:
             Nx,Ny,Nz,Nd=np.shape(volume)
         except:
+            Nz=1
+            Nx,Ny,Nd=np.shape(volume)
             print('please check if you input is 4D volume')
+        
         if Nz==1:
             Nx,Ny,Nz,Nd=np.shape(volume)
             plt.style.use('dark_background')
-            fig,axs=plt.subplots(1,Nd, figsize=(1*3.3,Nd*3.3), constrained_layout=True)
+            fig,axs=plt.subplots(1,Nd, figsize=(Nd*3.3,Nz*3.3), constrained_layout=True)
             for d in range(Nd):
                     if vmin is None:
                         vmin = np.min(volume)
                     if vmax is None:
                         vmax = np.max(volume)
                     axs[d].imshow(volume[:,:,0,d],cmap=cmap,vmin=vmin,vmax=vmax)
-                    axs[d].set_title(f'{valueList[d]}',fontsize=5)
+                    axs[d].set_title(f'{valueList[d]}',fontsize='small')
                     axs[d].axis('off')
             img_dir= os.path.join(path,f'{ID}')
             if plot:
                 plt.savefig(img_dir,bbox_inches='tight')
+                plt.savefig(img_dir+'.pdf',bbox_inches='tight')
         elif len(np.shape(volume))==4:
             Nx,Ny,Nz,Nd=np.shape(volume)
             plt.style.use('dark_background')
         
-            fig,axs=plt.subplots(Nz,Nd, figsize=(Nz*3.3,Nd*3))            
+            fig,axs=plt.subplots(Nz,Nd, figsize=(Nd*3.3,Nz*3),constrained_layout=True)            
             for d in range(Nd):
                 for z in range(Nz):
                     if vmin is None:
@@ -877,15 +1029,17 @@ class mapping:
 
                     axs[z,d].imshow(volume[:,:,z,d],cmap=cmap,vmin=vmin,vmax=vmax)
                     if z==0:
-                        axs[z,d].set_title(f'{d}\n{valueList[d]}',fontsize=5)
+                        axs[z,d].set_title(f'{d}\n{valueList[d]}',fontsize='small')
                     else:
-                        axs[z,d].set_title(f'{valueList[d]}',fontsize=5)
+                        axs[z,d].set_title(f'{valueList[d]}',fontsize='small')
                     axs[z,d].axis('off')
         #plt.show()
         #root_dir=r'C:\Research\MRI\MP_EPI\saved_ims'
             img_dir= os.path.join(path,f'{ID}')
             if plot:
                 plt.savefig(img_dir, bbox_inches='tight')
+                plt.savefig(img_dir+'.pdf',bbox_inches='tight')
+                
         return fig,axs
     def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=True):
         try:
@@ -924,9 +1078,10 @@ class mapping:
             im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
         cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
         img_dir= os.path.join(path,f'{ID}')
+        plt.show() 
         if plot:
             plt.savefig(img_dir)
-        plt.show()
+        plt.close()
     
     # visualize the overlay
     def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True,path=None):
@@ -1173,7 +1328,24 @@ class mapping:
         except:
             print('Not implement septal and lateral')
 
-
+    def _update_data(self,data):
+        if len(np.shape(data))==3:
+            #This data is Nx,Ny,Nz
+            Nx,Ny,Nd=np.shape(data)
+            self._data=data[:,:,np.newaxis,:]
+            self.Nx=Nx
+            self.Ny=Ny
+            self.Nz=1
+            self.Nd=Nd
+            self.shape=np.shape(data)
+        elif len(np.shape(data))==4:
+            Nx,Ny,Nz,Nd=np.shape(data)
+            self._data=data
+            self.Nx=Nx
+            self.Ny=Ny
+            self.Nz=Nz
+            self.Nd=Nd
+            self.shape=np.shape(data)
 
     def _delete(self,d=[],axis=-1):
         '''
@@ -1454,43 +1626,6 @@ class mapping:
             raise Exception('sorry only implemented Siemens grad table for now')
     
     
-    def go_calc_MD(self,  bFastOLS=False, bNumba=False):
-        '''
-        Calcualte diffusion tensor and DTI parameters (MD, FA, and HA)
-        '''
-        print('Calculating diffusion tensor for data: ')
-
-        #first unwrap everything for faster calculation using Numba
-        G = self.bvec
-        bval = self.bval
-        self.b_matrix = -1 * np.array([
-                G[:,0]*G[:,0]*bval,  #    Bxx
-                G[:,1]*G[:,1]*bval, #     Byy
-                G[:,2]*G[:,2]*bval, #     Bzz
-                G[:,0]*G[:,1]*2*bval, #   Bxy
-                G[:,0]*G[:,2]*2*bval, #   Bxz
-                G[:,1]*G[:,2]*2*bval, #   Byz
-                np.ones(G[:,0].shape) # S0
-            ]).T
-        NxNyNz = self.Nx*self.Ny*self.Nz
-
-        tensor, eval, evec = calctensor(self._data.reshape([NxNyNz, self.Nd]), 
-                                        self.b_matrix,
-                                        bFastOLS=bFastOLS) 
-        eval[eval<0] = 1e-10 # do this after numba fcn since it was supported
-        
-        # wrap everything back up
-        self.tensor = tensor.reshape([self.Nx,self.Ny,self.Nz,6])
-        self.eval = eval.reshape([self.Nx,self.Ny,self.Nz,3])
-        self.evec = evec.reshape([self.Nx,self.Ny,self.Nz,3,3]) # [Nx,Ny,Nz,xyz,p1p2p3]
-        #temp = np.copy(self.evec[:,:,:,1,:]) #blue and green are transposed
-        #self.evec[:,:,:,1,:] = self.evec[:,:,:,2,:] 
-        #self.evec[:,:,:,2,:] = temp
-
-        # calculate diffusion parametric maps
-        self.md = np.mean(self.eval,axis=3)
-
-        
 
 
 #########################################################################################
@@ -1675,34 +1810,6 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
     return T1_final,ra_final,rb_final,resTmps,resTmps[returnInd]
 
-#Only work in size 1, please write for loop if you want it to be in multiple slice
-def go_ir_fit(data=None,TIlist=None,ra=1,rb=-2,T1=1200,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
-    try:
-        Nx,Ny,Nd=np.shape(data)
-    except:
-        Nx,Ny,Nz,Nd=np.shape(data)
-    if len(np.shape(data))==3 or Nz==1:
-        NxNy=int(Nx*Ny)
-        finalMap=np.zeros((Nx,Ny,1))
-        finalRa=np.zeros((Nx,Ny,1))
-        finalRb=np.zeros((Nx,Ny,1))
-        finalRes=np.zeros((Nx,Ny,1))
-    elif len(np.shape(data))==4:
-        Nx,Ny,Nz,Nd=np.shape(data)
-        finalMap=np.zeros((Nx,Ny,Nz))
-        finalRa=np.zeros((Nx,Ny,Nz))
-        finalRb=np.zeros((Nx,Ny,Nz))
-        finalRes=np.zeros((Nx,Ny,Nz))
-        NxNy=int(Nx*Ny)
-    #Calculate all slices
-    dataTmp=np.copy(data)
-    for z in tqdm(range(Nz)):
-        
-        for x in range(Nx):
-            for y in range(Ny):
-                finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
-            T1bound=T1bound,invertPoint=invertPoint)
-    return finalMap,finalRa,finalRb,finalRes
 
 
 
@@ -1752,8 +1859,8 @@ def T2_recovery(tVec,T2,M0):
 
 #Single point t2 fit with exp
 def sub_mono_t2_fit_exp(ydata,xdata):
-    xdata=np.array(xdata)
-    ydata=np.array(ydata)
+    xdata=np.array(xdata,dtype=np.float64).squeeze()
+    ydata=np.array(ydata,dtype=np.float64).squeeze()
     ydata=abs(ydata)
     ydata=ydata/np.max(ydata)
 
@@ -1761,40 +1868,21 @@ def sub_mono_t2_fit_exp(ydata,xdata):
     try:
         t2Init = t2Init_dif/np.log(ydata[-1]/ydata[0])
         if t2Init<=0:
-            t2Init=30
+            t2Init=30.0
     except:
-        t2Init=30
+        t2Init=30.0
     pdInit=np.max(ydata)*1.5
-    params_OLS,params_covariance= curve_fit(T2_recovery,xdata,ydata,method='lm',p0=[t2Init,pdInit],maxfev=5000)
-    T2_exp,Mz_exp=params_OLS
+    try:
+        params_OLS,params_covariance= curve_fit(T2_recovery,xdata,ydata,method='lm',p0=[t2Init,pdInit],maxfev=5000)
+        T2_exp,Mz_exp=params_OLS
+    except:
+        T2_exp=1e-16
+        Mz_exp=1
     ydata_exp=T2_recovery(xdata,T2_exp,Mz_exp)
     n=len(xdata)
     res=1. / np.sqrt(n) * np.sqrt(np.power(1 - ydata_exp / xdata.T, 2).sum())
     return T2_exp,Mz_exp,res,ydata_exp
 
-def go_t2_fit(data=None,TElist=None,Mz=None,T2=None,method='exp'):
-    try:
-        Nx,Ny,Nd=np.shape(data)
-    except:
-        Nx,Ny,Nz,Nd=np.shape(data)
-    if len(np.shape(data))==3 or Nz==1:
-        NxNy=int(Nx*Ny)
-        finalMap=np.zeros((Nx,Ny,1))
-        finalMz=np.zeros((Nx,Ny,1))
-        finalRes=np.zeros((Nx,Ny,1))
-    elif len(np.shape(data))==4:
-        Nx,Ny,Nz,Nd=np.shape(data)
-        finalMap=np.zeros((Nx,Ny,Nz))
-        finalMz=np.zeros((Nx,Ny,Nz))
-        finalRes=np.zeros((Nx,Ny,Nz))
-        NxNy=int(Nx*Ny)
-    dataTmp=np.copy(data)
-    for z in tqdm(range(Nz)):
-
-        for x in range(Nx):
-            for y in range(Nz):
-                finalMap[x,y,z],finalMz[x,y,z],finalRes[x,y,z],_=sub_mono_t2_fit_exp(ydata=dataTmp,xdata=TElist)
-    return finalMap,finalMz,finalRes
 
 def moco(data,obj,valueList=None,target_ind=0):
     if valueList==None:
@@ -2153,3 +2241,6 @@ def read_trigger(filePath,reject=False,default=327,sigma=50):
         else:
             return triggerTime
     return triggerTime
+
+
+# %%

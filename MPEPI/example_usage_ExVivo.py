@@ -17,7 +17,7 @@
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib inline                        
-from libDiffusion_V2 import diffusion  # <--- this is all you need to do diffusion processing
+from libDiffusion_exvivo import diffusion  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -188,7 +188,7 @@ for items in a:
     print(items,f'{np.shape(a[items])}')
 #%%Use the traditional DTI
 %matplotlib inline                        
-from libDiffusion_V2 import diffusion  # <--- this is all you need to do diffusion processing
+from libDiffusion_exvivo import diffusion  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -199,8 +199,8 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 #%%
-ID='UCSF_7025'
-path=rf'C:\Research\MRI\exvivo\{ID}_07032023\CIRC_DEVELOPMENT_diffusion\MR ep2d_diff_mddw30_p2_s2'
+ID='UCSF_7021'
+path=rf'C:\Research\MRI\exvivo\SecondRUn\UCSF_7021_Nov_15 UCSF_7021_Nov_15\CIRC_DEVELOPMENT diffusion\MR ep2d_diff_mddw30_p2_s2'
 import fnmatch,pydicom
 import SimpleITK as sitk
 dicom_filelist = fnmatch.filter(sorted(os.listdir(path)),'*.dcm')
@@ -254,6 +254,9 @@ for d in diffDicomHDRRange:
 #%%
 dti = diffusion(data=data_final,bval=diffBVal,bvec=diffGrad,ID=ID,datasets=datasets)
 
+#%%
+savedir=r'C:\Research\MRI\exvivo\SecondRUn'
+dti=diffusion(os.path.join(savedir,f'{ID}.diffusion'))
 #%%
 plt.imshow(dti._data[:,:,35,0],cmap='gray')
 # %% ####################################################################################
@@ -317,7 +320,8 @@ fig4.show()
 
 # save
 #%%
-savedir=r'C:\Research\MRI\exvivo\SecondRUn\Saved_Images'
+savedir=r'C:\Research\MRI\exvivo\ThirdRun'
+#%%
 dti.save(filename=os.path.join(savedir,f'{ID}.diffusion'))
 
 #%%
@@ -328,11 +332,23 @@ dti.save(filename=os.path.join(savedir,f'{ID}.diffusion'))
 pixelSpacing=datasets[0].PixelSpacing
 sliceThickness=datasets[0].SliceThickness
 ImagePositionPatientList=[]
+pixelSpacingList=[]
+sliceThicknessList=[]
+imageOrientationPatientList=[]
 for ds in datasets:
     ImagePositionPatientList.append(ds.ImagePositionPatient)
+    pixelSpacingList.append(ds.PixelSpacing)
+    sliceThicknessList.append(ds.SliceThickness)
+    imageOrientationPatientList.append(datasets[0].ImageOrientationPatient)
 ImagePositionPatientList_final = np.array(ImagePositionPatientList).reshape([Nz,Nd,3],order='F')
 imageOrientationPatient=datasets[0].ImageOrientationPatient
-
+pixelSpacingList_final=np.array(pixelSpacingList).reshape([Nz,Nd,2],order='F')
+sliceThicknessList_final=np.array(sliceThicknessList).reshape([Nz,Nd,1],order='F')
+imageOrientationPatientList_final=np.array(imageOrientationPatientList).reshape([Nz,Nd,6],order='F')
+print(f'{ID}')
+print('SliceThickness:',sliceThicknessList_final)
+print('PixelSpacing:',pixelSpacingList_final)
+print('ImageOrientationPatient:',imageOrientationPatientList_final)
 
 #%%
 #Save the struct with
@@ -361,99 +377,26 @@ mdict['evals']=dti.eval
 mdict['ha']=dti.ha
 mdict['bval']=dti.bval
 mdict['G']=dti.bvec
-mdict['PixelSpacing']=pixelSpacing
-mdict['SliceThickness']=sliceThickness
-mdict['ImagePositionPatient']=ImagePositionPatientList
-mdict['ImageOrientationPatient']=imageOrientationPatient
 mdict['bmatrix']=dti.b_matrix
 #mdict['param']=dti.datasets
 mdict['colFA']=colFA
-mdict['PixelSpacing']=pixelSpacing
-mdict['SliceThickness']=sliceThickness
+mdict['PixelSpacing']=pixelSpacingList_final
+mdict['SliceThickness']=sliceThicknessList_final
 mdict['ImagePositionPatient']=ImagePositionPatientList_final
-mdict['ImageOrientationPatient']=imageOrientationPatient
+mdict['ImageOrientationPatient']=imageOrientationPatientList_final
+
+savedir=r'C:\Research\MRI\exvivo\ThirdRun'
 filename=os.path.join(savedir,f'{ID}.mat')
 savemat(filename,mdict)
 
 
 #%%
+
 from scipy.io import loadmat
 filename=os.path.join(savedir,f'{ID}.mat')
 a=loadmat(filename)
+print(f'{ID}')
 for items in a:
     print(items,f'{np.shape(a[items])}')
 # %%
-data=data.transpose(1,2,0,3)
-dti._data=data
-dti.bval=diffBValArray
-dti.bvec=np.array(diffGradArray)
-Nx,Ny,Nz,Nd=np.shape(data)
-dti.Nx=Nx
-dti.Ny=Ny
-dti.Nz=Nz
-dti.Nd=Nd
-dti.shape=np.shape(data)
 
-#%%
-#Plot the single images
-plt.subplot(211)
-plt.imshow(dti._data[:,:,40,0],cmap='gray')
-plt.subplot(212)
-plt.imshow(dti._data[:,:,40,1],cmap='gray')
-# %%
-def setThrehold(data=None,thresholdcommand=2):
-    #calculate the Y diviation:
-    #Reshape
-    Nx,Ny,Nz,Nd=np.shape(data)
-    Y=data.reshape((Nx*Ny,Nz,Nd))
-    Y_mask=np.ones((Nx*Ny,Nz,Nd),dtype=bool)
-    threshold = thresholdcommand*np.std(Y,axis=0)
-    Y_mask[abs(Y)<threshold]=0
-
-    return Y_mask.reshape((Nx,Ny,Nz,Nd))
-#%%
-#################TODO see what is kernel PCA
-Nx,Ny,Nz,Nd=np.shape(data)
-Y=data.reshape((Nx*Ny,Nz,Nd))
-Y_mask=np.ones((Nx*Ny,Nz,Nd),dtype=bool)
-Y_mask[abs(Y)>1000]=0
-Y_mask[abs(Y)<50]=0
-datatemp=Y*Y_mask
-from sklearn.decomposition import KernelPCA
-kernel_pca = KernelPCA(
-    n_components=5, kernel="rbf", gamma=10, fit_inverse_transform=True, alpha=0.1
-)
-X_test_kernel_pca = kernel_pca.fit(Y_mask[:,40,0].reshape(1,-1))
-
-#%%
-kernal1=X_test_kernel_pca[:,0].reshape(Nx,Ny)
-kernal2=X_test_kernel_pca[:,1].reshape(Nx,Ny)
-plt.scatter(kernal1)
-plt.scatter(kernal2)
-
-#%%
-#threshold = 1*np.std(Y,axis=0)
-#Y_mask[abs(Y)<threshold]=0
-mask1=Y_mask.reshape((Nx,Ny,Nz,Nd))
-
-#Second threhold:
-
-plt.subplot(211)
-plt.imshow(dti._data[:,:,40,0]*mask1[:,:,40,0],cmap='gray')
-plt.subplot(212)
-plt.imshow(dti._data[:,:,40,0],cmap='gray')
-# %%
-dti.go_calc_DTI(bclickCOM=False,bCalcHA=True,bFastOLS=True,bNumba=True)
-dti.imshow_diff_params()
-# %%
-def setThrehold(Y,thresholdcommand='default'):
-    #calculate the Y diviation:
-    #The input should be NX*Ny,Nz,Nrep
-    if thresholdcommand== 'default':
-        threshold = 1*np.std(Y,axis=0)
-    elif thresholdcommand==0:
-        return Y
-    else:
-        threshold=np.float(thresholdcommand)
-    Y[abs(Y)<threshold]=0
-    return Y

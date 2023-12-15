@@ -2,7 +2,7 @@
 # Import libraries ######################################################################
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
-%matplotlib qt                      
+%matplotlib inline                     
 from libMapping_v13 import *  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,11 +18,13 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
 from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
+import matplotlib
+matplotlib.rcParams['savefig.dpi'] = 400
 #%%
-plot=True
+plot=False
 # %%
-CIRC_ID='CIRC_00373'
-dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI_Z')
+CIRC_ID='CIRC_00452'
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 dirpath=os.path.dirname(dicomPath)
 img_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
 # make directory for saved images if it doesn't exist yet
@@ -42,7 +44,7 @@ MP03.go_crop_Auto()
 #%%
 fig,axs=MP03.imshow_corrected(ID='MP03_raw',plot=plot,path=img_dir,valueList=range(0,1000))
 #%%
-dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP02_T2_Z')
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP02_T2')
 MP02 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False)
 fig,axs=MP02.imshow_corrected(ID='MP02_raw',plot=plot,path=img_dir)
 # %%
@@ -54,8 +56,8 @@ MP01 = mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327,sigma=100
 #MP01.go_crop_Auto()
 
 #MP01.imshow_px()
-fig,axs=MP01.imshow_corrected(ID='MP01_T1_raw',plot=plot,path=img_dir)
-#%%
+#fig,axs=MP01.imshow_corrected(ID='MP01_T1_raw',plot=plot,path=img_dir)
+
 #%%
 
 data_8000,_,_=readFolder(dicomPath=os.path.join(dirpath,rf'MR ep2d_MP01_TE_40_bright_Z'))
@@ -83,7 +85,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Delete the ones that 
 ####Be careful for the delete!!!!!!#############################3
-MP01_0._delete(d=[0,2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,21,22,23,25,27,28,29,31,32,33,35,36,37,38,40])
+MP01_0._delete(d=[3,4,6,7,8,9,10,11,13,14,15,17,19,21,22,25,27,28,29,31,33,34,36,37,38])
 fig,axs=MP01_0.imshow_corrected(ID='MP01_0_T1_seletive1',plot=plot,path=img_dir)
 #%%
 data,valueDict,dcmDict = readFolder(dicomPath=dicomPath,reject=False,default=270,sigma=75,sortSlice=False)
@@ -107,7 +109,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Truncation
 ####Be careful for the delete!!!!!!#############################3
-MP01_1._delete(d=[0,2,3,5,6,7,9,12,13,15,16,18,20,21,23,25,27,29,30,31,32,33,34,35,36,37,38,39])
+MP01_1._delete(d=[3,4,7,8,9,11,13,15,16,17,18,19,20,21,22,25,26,27,28,29,31,33,34,36,38])
 fig,axs=MP01_1.imshow_corrected(ID='MP01_1_T1_seletive1',plot=plot,path=img_dir)
 
 #%%
@@ -132,7 +134,7 @@ for i in range(np.shape(axs)[-1]):
 # %%
 #Truncation
 ####Be careful for the delete!!!!!!#############################3
-MP01_2._delete(d=[1,2,3,6,7,8,10,11,14,15,16,17,18,20,22,23,25,27,28,29,30,31,32,33,35,36,37,38,39,40
+MP01_2._delete(d=[3,5,6,7,10,11,12,13, 15,16,18,20,22,23,24,26,28,29,30,31,33,34,37,38
 ])
 fig,axs=MP01_2.imshow_corrected(ID='MP01_2_T1_seletive1',plot=plot,path=img_dir)
 #%%
@@ -183,7 +185,7 @@ MP03.save(filename=os.path.join(img_dir,f'{MP03.ID}.mapping'))
 try:
     dicomPath=os.path.join(dirpath,f'MP01_T1_post')
 
-    print(f'Readding\n{dicomPath}\n')
+    print(f'Reading\n{dicomPath}\n')
     ID = os.path.dirname(dicomPath).split('\\')[-1]
     MP01_post = mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327,sigma=100)
     #MP01.go_crop_Auto()
@@ -210,7 +212,7 @@ print(savepath)
 from scipy.io import loadmat
 a=loadmat(savepath)
 #%%
-print(MP02.CIRC_ID)
+print(MP03.CIRC_ID)
 
 for items in a:
     print(items,f'{np.shape(a[items])}')
