@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 #%%
 dirname='C:\Research\MRI\MP_EPI'
-df=pd.read_csv(os.path.join(dirname,r'mappingDat_Sep19_Nov_3.csv'))
+df=pd.read_csv(os.path.join(dirname,r'mapping_Dec.csv'))
 #Read one only
 
 #CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00393','CIRC_00407']    

@@ -581,7 +581,7 @@ class mapping:
         z=-1,
         reject=None,
         image_type="map", 
-        cmap="gray", 
+        cmap=None, 
         dilate=True, 
         kernel=3, 
         roi_names=['endo', 'epi'],
@@ -608,6 +608,8 @@ class mapping:
         data=self._data
         if crange is None:
             crange=[np.min(data),np.max(data)]
+        if cmap==None:
+            cmap=self.cmap
         if z == -1: #new ROI
             self.mask_endo = np.full((data).shape[:3], False, dtype=bool) # [None]*self.Nz
             self.mask_epi = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
@@ -616,14 +618,20 @@ class mapping:
             self.mask_lateral = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
             self.CoM = [None]*self.Nz
             slices = range(self.Nz)
+            if reject != None:
+                slices = np.delete(slices, reject)
         else: # modify a specific slice for ROI
-            slices = [z]
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
         for z in slices:
 
             if image_type == "b0":
                 image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
                 fig = plt.figure()
-                plt.imshow(image, cmap=cmap, vmax=np.max(image),vmin=np.min(image))
+                plt.imshow(image, cmap='gray', vmax=np.max(image),vmin=np.min(image))
             
             elif image_type == "b0_avg":
                 image = np.mean(self._data[:,:,z,:], axis=-1)
@@ -668,7 +676,7 @@ class mapping:
             ind = np.where(self.mask_endo[..., z]>0)
             self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
 
-            plt.close()
+            
     
     def go_create_GIF(self,path_dir=None,CIRC_ID=None,ID=None,data=None):
         if data is None:
@@ -1041,6 +1049,93 @@ class mapping:
                 plt.savefig(img_dir+'.pdf',bbox_inches='tight')
                 
         return fig,axs
+
+    def go_resegment_LV(self, z=-1, reject=None, image_type="map", cmap=None, dilate=True, kernel=3, roi_names=['endo', 'epi'],crange=None):
+        '''
+        Adjust segmentations
+        
+        Input:
+            * z: slices to segment, -1 (default) to resegment all
+            * image_type: 
+                    - "b0_avg": average of all b0 (really b=50) images
+                    - "b0": first b0 image
+                    - "MD": md map
+                    - "HA": ha map
+                    - "HA overlay": shows HA masked by current LV mask over b0_avg
+            * dilate: for "HA overlay", dilates current LV mask
+            * cmap: color map, "gray" (default) for grayscale, may want "jet" for HA
+            * roi_names: ROIs you want to redraw
+        
+        '''
+    # you will need to use this decorator to make this work --> %matplotlib qt
+        if crange ==None:
+            crange=self.crange
+        if cmap==None:
+            cmap=self.cmap
+        if image_type == "map":
+            alpha = 1.0*self.mask_lv
+            if dilate:
+                import cv2
+                kernel = np.ones((kernel, kernel), np.uint8)
+                alpha = cv2.dilate(alpha, kernel, iterations=1)
+                alpha = 1.0*(alpha > 0)
+            
+        if z == -1: # new ROI
+            slices = np.arange(self.Nz)
+            
+            if reject != None:
+                slices = np.delete(slices, reject)
+        
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+        for z in slices:
+
+            if image_type == "b0":
+                image = self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image),vmin=np.min(image))
+            
+            elif image_type == "b0_avg":
+                image = np.mean(self._data[:,:,z,:], axis=-1)
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+            elif image_type == "HA":
+                image = self.ha[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap)
+                
+            elif image_type == "MD":
+                image = self.md[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                
+          
+            elif image_type == "map":
+                image = self._map[:,:,z]
+                fig = plt.figure()
+                plt.imshow(image, cmap=cmap,vmin=crange[0],vmax=crange[1])
+            # draw ROIs
+            plt.title('Slice '+ str(z))
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            multirois = MultiRoi(fig=fig, roi_names=roi_names)
+            if np.any(np.array(roi_names) == "endo"):
+                self.mask_endo[..., z] = multirois.rois['endo'].get_mask(image)
+            if np.any(np.array(roi_names) == "epi"):
+                self.mask_epi[..., z] = multirois.rois['epi'].get_mask(image)
+            self.mask_lv[..., z] = self.mask_epi[..., z]^self.mask_endo[..., z]
+            if np.any(np.array(roi_names) == "septal"):
+                self.mask_septal[..., z] = multirois.rois['septal'].get_mask(image)
+            if np.any(np.array(roi_names) == "lateral"):
+                self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
+
+
+
+
     def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=True):
         try:
             Nx,Ny,Nz=np.shape(self._map)
@@ -1078,10 +1173,8 @@ class mapping:
             im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
         cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
         img_dir= os.path.join(path,f'{ID}')
-        plt.show() 
         if plot:
             plt.savefig(img_dir)
-        plt.close()
     
     # visualize the overlay
     def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True,path=None):
@@ -1113,11 +1206,10 @@ class mapping:
             axes[sl].set_axis_off()
             axes[sl].imshow(base_im, cmap="gray", vmax=np.max(base_im)*brightness)
             im = axes[sl].imshow(self._map[..., sl], alpha=alpha, vmin=crange[0],vmax=crange[1], cmap=cmap)
-        cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
-        img_dir= os.path.join(path,f'{ID}')
+        #cbar = fig.colorbar(im, ax=axes[-1], shrink=0.95, pad=0.04, aspect=11)
+        img_dir= os.path.join(path,f'{ID}_overlay')
         if plot:
             plt.savefig(img_dir)
-        plt.show()  
 
 # ========================================================================================================
 # "PRIVATE" CLASS FUNCTIONS ==============================================================================
@@ -1318,13 +1410,13 @@ class mapping:
                 Segemented: Please input .diffusion or .mapping
         
         '''
-        self.CoM=segmented.CoM
-        self.mask_lv=segmented.mask_lv
-        self.mask_endo=segmented.mask_endo
-        self.mask_epi=segmented.mask_epi
+        self.CoM=np.copy(segmented.CoM)
+        self.mask_lv=np.copy(segmented.mask_lv)
+        self.mask_endo=np.copy(segmented.mask_endo)
+        self.mask_epi=np.copy(segmented.mask_epi)
         try:
-            self.mask_septal=segmented.mask_septal
-            self.mask_lateral=segmented.mask_lateral
+            self.mask_septal=np.copy(segmented.mask_septal)
+            self.mask_lateral=np.copy(segmented.mask_lateral)
         except:
             print('Not implement septal and lateral')
 

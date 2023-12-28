@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 plt.rcParams.update({'axes.titlesize': 'small'})
 import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
-plot=False
+plot=True
 def go_generate_maps(CIRC_NUMBER):
     CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
     print(f'Running{CIRC_ID}')
@@ -52,7 +52,7 @@ def go_generate_maps(CIRC_NUMBER):
         plt.figure()
         plt.axis('off')
         plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=3000)
-        img_dir= os.path.join(img_save_dir,f'{obj.CIRC_IC}_Slice{ss}_T1')
+        img_dir= os.path.join(img_save_dir,f'{obj.CIRC_ID}_MP01_Slice{ss}_T1')
         plt.savefig(img_dir)
         plt.close()
         obj_T1._map=finalMap
@@ -78,12 +78,12 @@ def go_generate_maps(CIRC_NUMBER):
     plt.close()
     MP03.imshow_map(path=img_save_dir,plot=plot)
     plt.close()
-    MP01_0.save(filename=os.path.join(img_save_dir,f'{MP01_0.ID}_p.mapping'))
-    MP01_1.save(filename=os.path.join(img_save_dir,f'{MP01_1.ID}_p.mapping'))
-    MP01_2.save(filename=os.path.join(img_save_dir,f'{MP01_2.ID}_p.mapping'))
-    MP02.save(filename=os.path.join(img_save_dir,f'{MP02.ID}_p.mapping'))
-    MP03.save(filename=os.path.join(img_save_dir,f'{MP03.ID}_p.mapping'))
-    MP01.save(filename=os.path.join(img_save_dir,f'{MP01.ID}_p.mapping'))
+    MP01_0.save(filename=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_{MP01_0.ID}_p.mapping'))
+    MP01_1.save(filename=os.path.join(img_save_dir,f'{MP01_1.CIRC_ID}_{MP01_1.ID}_p.mapping'))
+    MP01_2.save(filename=os.path.join(img_save_dir,f'{MP01_2.CIRC_ID}_{MP01_2.ID}_p.mapping'))
+    MP02.save(filename=os.path.join(img_save_dir,f'{MP02.CIRC_ID}_{MP02.ID}_p.mapping'))
+    MP03.save(filename=os.path.join(img_save_dir,f'{MP03.CIRC_ID}_{MP03.ID}_p.mapping'))
+    MP01.save(filename=os.path.join(img_save_dir,f'{MP01.CIRC_ID}_{MP01.ID}_p.mapping'))
 
 
 if __name__=='__main__':

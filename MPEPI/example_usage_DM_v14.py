@@ -3,8 +3,8 @@
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from MPEPI.libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from MPEPI.libMapping_v12 import readFolder,decompose_LRT,go_ir_fit,moco,moco_naive
+from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
+from libMapping_v12 import readFolder,decompose_LRT,go_ir_fit,moco,moco_naive
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -325,6 +325,8 @@ MP03.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping.csv',crange=[0,3])
 
 #%%
 #Show the T1 T2 Map
+CIRC_ID='CIRC_00419'
+dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 data_path=os.path.dirname(dicomPath)
 T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_3slice_8mm_150_gap_MOCO_T1-2'))
 
