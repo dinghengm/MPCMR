@@ -104,7 +104,7 @@ gy_pre = pp.make_trapezoid(
     channel="y", system=system, area=Ny / 2 * delta_k, duration=pre_time
 )
 
-# Phase blip in shortest possible time
+# Phase blip in shortest possible time  #will be used in EPI blip up (Not use here)
 dur = math.ceil(2 * math.sqrt(delta_k / system.max_slew) / 10e-6) * 10e-6
 gy = pp.make_trapezoid(channel="y", system=system, area=delta_k, duration=dur)
 
@@ -122,6 +122,9 @@ duration_to_center = (Nx / 2 + 0.5) * pp.calc_duration(
 ) + Ny / 2 * pp.calc_duration(gy)
 rf_center_incl_delay = rf.delay + pp.calc_rf_center(rf)[0]
 rf180_center_incl_delay = rf180.delay + pp.calc_rf_center(rf180)[0]
+
+
+#Be sure to use math.ceil/np.ceil and divide by grad_raster_time and * grad_raster_time to match the hardware systems
 delay_TE1 = math.ceil((
     TE / 2
     - pp.calc_duration(gz)
@@ -138,6 +141,7 @@ delay_TE2 = math.ceil((
     - duration_to_center
 )/system.grad_raster_time)*system.grad_raster_time
 
+#Make sure delay time >0
 assert(delay_TE1>=0)
 assert(delay_TE2>=0)
 
@@ -160,6 +164,7 @@ gr_50=math.ceil(g_50/system.max_slew/system.grad_raster_time)*system.grad_raster
 g_500=np.sqrt(bFactor500*1e6/bFactCalc(1,small_delta,big_delta))
 gr_500=math.ceil(g_500/system.max_slew/system.grad_raster_time)*system.grad_raster_time
 
+#Make diffusion gradient for xyz and b50, b500
 gDiff_50_x=pp.make_trapezoid(channel='x',amplitude=g_50,rise_time=gr_50,flat_time=small_delta-gr_50,system=system)
 gDiff_50_y=pp.make_trapezoid(channel='y',amplitude=g_50,rise_time=gr_50,flat_time=small_delta-gr_50,system=system)
 gDiff_50_z=pp.make_trapezoid(channel='z',amplitude=g_50,rise_time=gr_50,flat_time=small_delta-gr_50,system=system)
@@ -167,12 +172,13 @@ gDiff_500_x=pp.make_trapezoid(channel='x',amplitude=g_500,rise_time=gr_500,flat_
 gDiff_500_y=pp.make_trapezoid(channel='y',amplitude=g_500,rise_time=gr_500,flat_time=small_delta-gr_500,system=system)
 gDiff_500_z=pp.make_trapezoid(channel='z',amplitude=g_500,rise_time=gr_500,flat_time=small_delta-gr_500,system=system)
 
-
+#check gradient time < 50
 assert(pp.calc_duration(gDiff_50_x)<=delay_TE1)
 assert(pp.calc_duration(gDiff_50_x)<=delay_TE2)
 assert(pp.calc_duration(gDiff_500_x)<=delay_TE1)
 assert(pp.calc_duration(gDiff_500_x)<=delay_TE2)
 
+#Not used, the calculation has some issue.
 delayTR= math.ceil( (TR-pp.calc_duration(gz)  -pp.calc_duration(gx)/2 -TE +gz.fall_time +gz.flat_time/2 )/system.grad_raster_time)*system.grad_raster_time
 
 #%%
@@ -187,18 +193,21 @@ for gDiff in [gDiff_50_x,gDiff_500_x]:
         seq.add_block(rf, gz)
         seq.add_block(gx_pre, gy_pre, gz_reph)
         seq.add_block(pp.make_delay(delay_TE1),gDiff)
+        #Might not need gz_spoil if it has gDiff? 
         seq.add_block(gz_spoil)
         seq.add_block(rf180)
         seq.add_block(gz_spoil)
         seq.add_block(pp.make_delay(delay_TE2),gDiff)
         seq.add_block(gx, adc)  # Read one line of k-space
         #seq.add_block(gy)  # Phase blip
-        #change the gy_pre area to one line smaller: start from positive max line
+        #change the gy_pre area to one line smaller, which starts from positive max line
         gy_pre = pp.make_trapezoid(
     channel="y", system=system, area=((Ny / 2)-(i+1)) * delta_k, duration=pre_time
 )
-        #gx.amplitude = -gx.amplitude  # Reverse polarity of read gradient
-        seq.add_block(pp.make_delay(delayTR))
+        #gx.amplitude = -gx.amplitude  # Reverse polarity of read gradient no need for se
+        #seq.add_block(pp.make_delay(delayTR))
+        #To simplify the sequence. hard code TR time
+        seq.add_block(pp.make_delay(8))
 
 
 ok, error_report = seq.check_timing()
@@ -213,9 +222,14 @@ else:
 # VISUALIZATION
 # ======
 if plot:
+    #Plot first readout. 
     seq.plot(time_range=(0,0.1))
+    #See next readout
+    #seq.plot(time_range=(8,8.1))
 
 #%%
+#Sometimes it fails.
+#TE and TR calculation sometimes are wrong based on github's pulseq.
 rep=seq.test_report()
 print(rep)
 
