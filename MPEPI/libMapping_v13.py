@@ -999,7 +999,7 @@ class mapping:
         if valueList is None:
             valueList=self.valueList
         if ID is None:
-            ID=self.ID
+            ID=ID=str('mosiac_'+self.CIRC_ID + '_' + self.ID )
         try:
             Nx,Ny,Nz,Nd=np.shape(volume)
         except:
@@ -1146,7 +1146,7 @@ class mapping:
             volume = self._map
         #Generate the map color
         if ID==None:
-            ID=self.ID
+            ID=str('map_' + self.CIRC_ID + '_' + self.ID)
         if path==None:
             path=os.path.dirname(self.path)
         if crange==None:

@@ -18,7 +18,8 @@ matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
 #%%
 CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
-CIRC_NUMBER=CIRC_ID_List[9]
+#CIRC_NUMBER=CIRC_ID_List[9]
+CIRC_NUMBER=CIRC_ID_List[2]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023')
@@ -26,7 +27,7 @@ mapList=[]
 for dirpath,dirs,files in  os.walk(img_root_dir):
     for x in files:
         path=os.path.join(dirpath,x)
-        if path.endswith('p.mapping'):
+        if path.endswith('m.mapping'):
             if CIRC_ID in path:
                 mapList.append(path)
 MP01=mapping(mapList[3])
@@ -35,13 +36,31 @@ MP02=mapping(mapList[4])
 #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
 MP03=mapping(mapList[5])
 #%%
+def imshowMap(obj,path,plot):
+    num_slice=obj.Nz
+    volume=obj._map
+    ID=str('map_' + obj.CIRC_ID + '_' + obj.ID)
+    crange=obj.crange
+    cmap=obj.cmap
+    figsize = (3.4*num_slice, 3)
+
+    fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+    axes=axes.ravel()
+    for sl in range(num_slice):
+        axes[sl].set_axis_off()
+        im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.4, pad=0.018, aspect=8)
+    img_dir= os.path.join(path,f'{ID}')
+    if plot:
+        plt.savefig(img_dir)
+#%%
 %matplotlib inline
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
-MP02.imshow_map(plot=False,path=img_save_dir)
-MP01.imshow_map(plot=False,path=img_save_dir)
-MP03.imshow_map(plot=False,path=img_save_dir)
+imshowMap(obj=MP02,plot=True,path=img_save_dir)
+imshowMap(obj=MP01,plot=True,path=img_save_dir)
+imshowMap(obj=MP03,plot=True,path=img_save_dir)
 #%%
 %matplotlib qt
 MP02.go_segment_LV(reject=None, image_type="b0_avg")

@@ -41,11 +41,11 @@ def go_generate_maps(CIRC_NUMBER):
 
     for obj in MPs_list:
         obj._data=np.copy(obj._raw_data)
-        obj.go_resize()
+        #obj.go_resize()
         obj._update()
     for obj in MP01_list:
         obj._data=np.copy(obj._raw_data)
-        obj.go_resize()
+        #obj.go_resize()
         obj._update()
     for ss,obj_T1 in enumerate(MP01_list):
         finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=4)
@@ -78,17 +78,18 @@ def go_generate_maps(CIRC_NUMBER):
     plt.close()
     MP03.imshow_map(path=img_save_dir,plot=plot)
     plt.close()
-    MP01_0.save(filename=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_{MP01_0.ID}_p.mapping'))
-    MP01_1.save(filename=os.path.join(img_save_dir,f'{MP01_1.CIRC_ID}_{MP01_1.ID}_p.mapping'))
-    MP01_2.save(filename=os.path.join(img_save_dir,f'{MP01_2.CIRC_ID}_{MP01_2.ID}_p.mapping'))
-    MP02.save(filename=os.path.join(img_save_dir,f'{MP02.CIRC_ID}_{MP02.ID}_p.mapping'))
-    MP03.save(filename=os.path.join(img_save_dir,f'{MP03.CIRC_ID}_{MP03.ID}_p.mapping'))
-    MP01.save(filename=os.path.join(img_save_dir,f'{MP01.CIRC_ID}_{MP01.ID}_p.mapping'))
+    MP01_0.save(filename=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_{MP01_0.ID}_m.mapping'))
+    MP01_1.save(filename=os.path.join(img_save_dir,f'{MP01_1.CIRC_ID}_{MP01_1.ID}_m.mapping'))
+    MP01_2.save(filename=os.path.join(img_save_dir,f'{MP01_2.CIRC_ID}_{MP01_2.ID}_m.mapping'))
+    MP02.save(filename=os.path.join(img_save_dir,f'{MP02.CIRC_ID}_{MP02.ID}_m.mapping'))
+    MP03.save(filename=os.path.join(img_save_dir,f'{MP03.CIRC_ID}_{MP03.ID}_m.mapping'))
+    MP01.save(filename=os.path.join(img_save_dir,f'{MP01.CIRC_ID}_{MP01.ID}_m.mapping'))
 
 
 if __name__=='__main__':
     from multiprocessing import Pool
     CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
+    #CIRC_ID_List=['429','398']
     with Pool(5) as p:  # Create a pool of 5 processes
         results = p.map(go_generate_maps,CIRC_ID_List)
     

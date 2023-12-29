@@ -3,8 +3,8 @@
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib qt                      
-from libMapping_v12 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v12 import *
+from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
+from libMapping_v13 import *
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -22,10 +22,16 @@ from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
 plot=True
+
 # %%
-CIRC_ID='CIRC_Phantom_Aug9'
-dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI\MR000000.dcm')
-dirpath=os.path.dirname(dicomPath)
+
+
+
+#CIRC_ID='CIRC_Phantom_Aug9'
+CIRC_ID='CIRC_Phantom_Oct_11_T1T2'
+#dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI\MR000000.dcm')
+#dirpath=os.path.dirname(dicomPath)
+dicomPath=fr'C:\Research\MRI\MP_EPI\Phangtom\CIRC_Phantom_Oct_11_T1T2 CIRC_Phantom_Oct_11_T1T2\MR ep2d_diff_Cima_ADC_M0_asym_5slices_b500_TE59_FOVphase37.5'
 MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID)
 MP03.valueList=[]
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
