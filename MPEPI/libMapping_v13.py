@@ -1136,7 +1136,7 @@ class mapping:
 
 
 
-    def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=True):
+    def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=False):
         try:
             Nx,Ny,Nz=np.shape(self._map)
         except:
@@ -1177,7 +1177,7 @@ class mapping:
             plt.savefig(img_dir)
     
     # visualize the overlay
-    def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=True,path=None):
+    def imshow_overlay(self,volume=None,crange=None,cmap='gray',ID=None,plot=False,path=None):
         try:
             Nx,Ny,Nz=np.shape(self._map)
             sl=0
@@ -1420,7 +1420,12 @@ class mapping:
         except:
             print('Not implement septal and lateral')
 
+
     def _update_data(self,data):
+        '''
+            This function is to update de the data to 4D shape if Nz=1;
+            Also, it will change the Nx,Ny,Nz,Nd,shape in the data structure.
+        '''
         if len(np.shape(data))==3:
             #This data is Nx,Ny,Nz
             Nx,Ny,Nd=np.shape(data)
@@ -1976,11 +1981,10 @@ def sub_mono_t2_fit_exp(ydata,xdata):
     return T2_exp,Mz_exp,res,ydata_exp
 
 
-def moco(data,obj,valueList=None,target_ind=0):
+def moco(data,obj,valueList=None,target_ind=0,plot=False):
     if valueList==None:
         valueList=obj.valueList
     data_regressed=decompose_LRT(data)
-    obj.imshow_corrected(volume=data_regressed,ID=f'{obj.ID}_Regressed',valueList=valueList,plot=True)
     #Show the images
     #Remove the MP01
     Nx,Ny,Nz,_=np.shape(data_regressed)
@@ -1989,16 +1993,18 @@ def moco(data,obj,valueList=None,target_ind=0):
     for z in range(Nz):
         data_corrected_temp[:,:,z,:]=obj._coregister_elastix(data_regressed[:,:,z,:],data[:,:,z,:],target_index=target_ind)
         A2[:,:,z,:] = data_corrected_temp[...,z,:]/np.max(data_corrected_temp[...,z,:])*255
-    if Nz==3:
-        A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
-    elif Nz==1:
-        A3=np.squeeze(A2)
     data_return=data_corrected_temp
-    obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_lrt_moco',valueList=valueList,plot=True)
-    img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_lrt_moco_.gif')
-    obj.createGIF(img_dir,A3,fps=5)
+    if plot:
+        if Nz==3:
+            A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+        elif Nz==1:
+            A3=np.squeeze(A2)
+        obj.imshow_corrected(volume=data_regressed,ID=f'{obj.ID}_Regressed',valueList=valueList,plot=plot)
+        obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_lrt_moco',valueList=valueList,plot=plot)
+        img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_lrt_moco_.gif')
+        obj.createGIF(img_dir,A3,fps=5)
     return data_return
-def moco_naive(data,obj,valueList=None,target_ind=0):
+def moco_naive(data,obj,valueList=None,target_ind=0,plot=False):
     if valueList==None:
         valueList=obj.valueList
     data_tmp=np.copy(data)
@@ -2008,14 +2014,16 @@ def moco_naive(data,obj,valueList=None,target_ind=0):
     for z in range(Nz):
         data_corrected_temp[:,:,z,:]=obj._coregister_elastix(data_tmp[:,:,z,:],data[:,:,z,:],target_index=target_ind)
         A2[:,:,z,:] = data_corrected_temp[...,z,:]/np.max(data_corrected_temp[...,z,:])*255
-    A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
     data_return=data_corrected_temp
-    obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_naive_moco',valueList=valueList,plot=True)
-    img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_naive_moco_.gif')
-    obj.createGIF(img_dir,A3,fps=5)
+    if plot==True:
+        A3=np.vstack((A2[:,:,0,:],A2[:,:,1,:],A2[:,:,2,:]))
+        img_dir= os.path.join(os.path.dirname(obj.path),f'{obj.CIRC_ID}_{obj.ID}_naive_moco_.gif')
+        obj.imshow_corrected(volume=data_return,ID=f'{obj.ID}_naive_moco',valueList=valueList,plot=plot)
+        obj.createGIF(img_dir,A3,fps=5)
     return data_return
 
 
+#Happy New Year!!!! by DM 1/2/2024
 def bmode(data,dir,x=None,y=None):
     if dir==None:
         dir='b_mode'

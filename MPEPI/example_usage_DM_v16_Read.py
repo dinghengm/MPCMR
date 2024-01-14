@@ -29,13 +29,13 @@ plot=True
 # %%
 CIRC_ID='CIRC_00446'
 img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
-saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)
+saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024_moco",CIRC_ID)
 if not os.path.exists(saved_img_root_dir):
             os.mkdir(saved_img_root_dir)
 
 # image root directory
 # Statas saved 
-stats_file = os.path.join(defaultPath, "MPEPI_stats_v2.csv") 
+stats_file = os.path.join(defaultPath, "MPEPI_stats_v16.csv") 
 
 #Read the MP01-MP03
 mapList=[]
@@ -100,8 +100,8 @@ for ss,obj_T1 in enumerate(MP01_list):
             obj_T1._update_data(moco_data_single_slice[:,:,np.newaxis,0:Ndtmp_end])
             obj_T1.go_crop_Auto()
             obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped',plot=plot,path=saved_img_root_dir)
+            obj_T1.go_create_GIF(path_dir=str(saved_img_root_dir))
             obj_T1._update_data(moco_data_single_slice[:,:,0:Ndtmp_end])
-            #obj_T1.go_create_GIF(path_dir=str(img_root_dir))
             print(obj_T1.ID,np.shape(obj_T1._data))
             print('valueList=',obj_T1.valueList)
         else:
@@ -120,20 +120,21 @@ for obj in MPs_list:
 '''
 #%%
 #Replace the between frames with the original frames
-#%%
-#Cancel some frames
-MP01_0._delete(d=[5])
-MP01_1._delete(d=[4])
-MP01_2._delete(d=[4])
-MP01_0.imshow_corrected(ID=f'MP01_Slice0_2',plot=plot,path=img_root_dir)
-MP01_1.imshow_corrected(ID=f'MP01_Slice1_2',plot=plot,path=img_root_dir)
-MP01_2.imshow_corrected(ID=f'MP01_Slice2_2',plot=plot,path=img_root_dir)
+#Conservative in 800-900 only
+for ss,obj_T1 in enumerate(MP01_list):
+    valueArray=np.array(obj_T1.valueList)
+    arrayInd=np.where(np.logical_and(valueArray>=700,valueArray<=1200))
+    
+    obj_T1._data[...,arrayInd]=obj_T1._raw_data[...,arrayInd]
+    obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped_updated',plot=plot,path=saved_img_root_dir)
+
+
 #%%
 #Save the file as M
-stats_file = os.path.join(os.path.dirname(img_root_dir), "MPEPI_stats_v2.csv") 
+stats_file = os.path.join(os.path.dirname(saved_img_root_dir), "MPEPI_stats_v2.csv") 
 
 for obj in MP01_list:
-    obj.save(filename=os.path.join(img_root_dir,f'{obj.ID}_m.mapping'))
+    obj.save(filename=os.path.join(saved_img_root_dir,f'{obj.ID}_m.mapping'))
     keys=['CIRC_ID','ID','valueList','shape']
     stats=[obj.CIRC_ID,obj.ID,str(obj.valueList),str(np.shape(obj._data))]
     data=dict(zip(keys,stats))
@@ -144,7 +145,7 @@ for obj in MP01_list:
         cvsdata.to_csv(stats_file, index=False)
 
 for obj in MPs_list:
-    obj.save(filename=os.path.join(img_root_dir,f'{obj.ID}_m.mapping'))
+    obj.save(filename=os.path.join(saved_img_root_dir,f'{obj.ID}_m.mapping'))
     keys=['CIRC_ID','ID','valueList']
     if 'mp02' in obj.ID.lower():
         stats=[obj.CIRC_ID,obj.ID,str(obj.valueList)]

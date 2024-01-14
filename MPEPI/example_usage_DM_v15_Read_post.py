@@ -148,3 +148,20 @@ MP02.save(filename=os.path.join(img_root_dir,f'{MP02.ID}_p.mapping'))
 
 
 # %%
+#%% Plot
+img_save_dir=img_root_dir
+MP01_post.crange=[0,1600]
+for map in [MP01,MP02,MP03,MP01_post]:
+    # create images images per map type
+    num_slice = map.Nz
+    figsize = (3.4*num_slice, 3)
+    fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+    crange=map.crange
+    cmap=map.cmap
+
+    for sl in range(num_slice):
+        axes[sl].set_axis_off()
+        im = axes[sl].imshow(map._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75, pad=0.018, aspect=18)
+    plt.savefig(os.path.join(img_save_dir, f"{map.CIRC_ID}_{map.ID}"))
+    plt.show()

@@ -23,7 +23,8 @@ def bFactCalc(g,delta,DELTA):
 
 
 #%%
-seq_filename="se_dwi_pypulseq_TE60_FOV135_Nx50_b500_z.seq"
+#This version implement bandwidth to match with epi
+seq_filename="se_dwi_pypulseq_TE65_FOV172_Nx64_b50_b500.seq"
 plot=bool
 write_seq=bool
 
@@ -31,15 +32,15 @@ write_seq=bool
 # SETUP
 # ======
 seq = pp.Sequence()  # Create a new sequence object
-fov = 135e-3  # Define FOV and resolution
-Nx = 50
-Ny = 50
+fov = 172e-3  # Define FOV and resolution
+Nx = 64
+Ny = 64
 slice_thickness=8e-3
 Nslices=1
 bFactor50=50
 bFactor500=500
 TE=65e-3
-TR=8        #8s
+TR=6        #8s
 
 # Set system limits
 system = pp.Opts(
@@ -70,10 +71,10 @@ rf, gz, _ = pp.make_sinc_pulse(
 # Define other gradients and ADC events
 delta_k = 1 / fov
 k_width = Nx * delta_k
-WD=2170
-
-readout_time=3.2e-4   #TODO #Might be able to change to match bandwidth
-
+#WD=130*Nx
+#readout_time= 1/WD * Nx   #TODO #Might be able to change to match bandwidth
+readout_time=3.2e-4 
+#print(readout_time)
 '''
 #Can be G.maxGrad * Nx=readout_time
 
@@ -187,9 +188,9 @@ delayTR= math.ceil( (TR-pp.calc_duration(gz)  -pp.calc_duration(gx)/2 -TE +gz.fa
 # CONSTRUCT SEQUENCE
 # ======
 # Define sequence blocks
-#for gDiff in [gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]:
+for gDiff in [gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]:
 
-for gDiff in [gDiff_500_z]:
+#for gDiff in [gDiff_500_z]:
 
     for i in range(Ny):
         seq.add_block(rf, gz)
@@ -210,7 +211,7 @@ for gDiff in [gDiff_500_z]:
         #gx.amplitude = -gx.amplitude  # Reverse polarity of read gradient no need for se
         #seq.add_block(pp.make_delay(delayTR))
         #To simplify the sequence. hard code TR time
-        seq.add_block(pp.make_delay(8))
+        seq.add_block(pp.make_delay(TR))
 
 
 ok, error_report = seq.check_timing()

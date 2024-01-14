@@ -50,16 +50,19 @@ system = pp.Opts(
     rf_ringdown_time=20e-6,   #default
     rf_dead_time=100e-6,    #default
     adc_dead_time=20e-6,    #default
+    grad_raster_time=50*10e-6
 )
 
 # ======
 # CREATE EVENTS
 # ======
 # Create 90 degree slice selection pulse and gradient
+#TODO Do I need Phase_OFF?
 rf, gz, _ = pp.make_sinc_pulse(
     flip_angle=np.pi / 2,
     system=system,
     duration=3e-3,
+    phase_offset=90 * np.pi / 180,
     #Slice thickness is 8e-3
     slice_thickness=slice_thickness,
     apodization=0.5,
@@ -72,7 +75,8 @@ delta_k = 1 / fov
 k_width = Nx * delta_k
 WD=2170
 
-readout_time=3.2e-4   #TODO #Might be able to change to match bandwidth
+#Here is the problem: TOO FAST can be 3e-3
+readout_time=2e-3   #TODO #Might be able to change to match bandwidth
 
 '''
 #Can be G.maxGrad * Nx=readout_time
@@ -84,12 +88,14 @@ BW=BW_per_pixel*Nx
 dwell_time=math.ceil(1/BW/system.grad_raster_time)*system.grad_raster_time
 readout_time=dwell_time*Nx
 '''
+#Might also need Fat Saturation /#Flair
+
 
 gx = pp.make_trapezoid(
     channel="x", system=system, flat_area=k_width, flat_time=readout_time
 )
 adc = pp.make_adc(
-    num_samples=Nx, system=system, duration=gx.flat_time, delay=gx.rise_time
+    num_samples=Nx, system=system, phase_offset=90 * np.pi / 180, duration=gx.flat_time, delay=gx.rise_time
 )
 
 # Pre-phasing gradients
@@ -109,10 +115,20 @@ gy_pre = pp.make_trapezoid(
 dur = math.ceil(2 * math.sqrt(delta_k / system.max_slew) / 10e-6) * 10e-6
 gy = pp.make_trapezoid(channel="y", system=system, area=delta_k, duration=dur)
 
+
+tRef=2e-3   #Not sure make it bigger
+rfref_phase=0
 #`Refocusing pulse with spoiling gradients
 rf180 = pp.make_block_pulse(
-    flip_angle=np.pi, system=system, duration=500e-6, use="refocusing"
+    flip_angle=np.pi,
+    system=system,
+    duration=2e-3,
+    phase_offset=rfref_phase,
+    use="refocusing"
 )
+
+tRefwd=tRef+system.rfRingdownTime+system.rfDeadTime
+
 gz_spoil = pp.make_trapezoid(
     channel="z", system=system, area=gz.area * 2, duration=3 * pre_time
 )

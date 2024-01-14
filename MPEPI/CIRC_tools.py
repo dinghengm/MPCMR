@@ -6,7 +6,26 @@ import matplotlib.pyplot as pl
 import nibabel as nib 
 import time
 from ipyfilechooser import FileChooser
+import matplotlib.pyplot as plt
+import os
+def imshowMap(obj,path,plot):
+    num_slice=obj.Nz
+    volume=obj._map
+    ID=str('map_' + obj.CIRC_ID + '_' + obj.ID)
+    crange=obj.crange
+    cmap=obj.cmap
+    figsize = (3.4*num_slice, 3)
 
+    fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+    axes=axes.ravel()
+    for sl in range(num_slice):
+        axes[sl].set_axis_off()
+        im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.4, pad=0.018, aspect=8)
+    img_dir= os.path.join(path,f'{ID}')
+    if plot:
+        plt.savefig(img_dir)
+    pass
 # conda install -c conda-forge ipyfilechooser
 
 

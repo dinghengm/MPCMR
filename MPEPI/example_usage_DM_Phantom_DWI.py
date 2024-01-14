@@ -1,5 +1,8 @@
-# %% 
-#Date Jan 9 2024                    
+# %% ####################################################################################
+# Import libraries ######################################################################
+#########################################################################################
+# all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
+%matplotlib qt                      
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
 from libMapping_v13 import *
 import numpy as np
@@ -18,20 +21,42 @@ plt.rcParams['savefig.dpi'] = 500
 from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
-plot=True
+plot=False
 
 # %%
 
 
 
 #CIRC_ID='CIRC_Phantom_Aug9'
-CIRC_ID='CIRC_Phantom_Aug_9th_Diff CIRC_Phantom_Aug_9th_Diff'
+CIRC_ID='CIRC_Phantom_Jan8'
 #dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI\MR000000.dcm')
 #dirpath=os.path.dirname(dicomPath)
-dicomPath=fr'C:\Research\MRI\MP_EPI\Phangtom\CIRC_Phantom_Aug_9th_Diff CIRC_Phantom_Aug_9th_Diff\CIRC_DEVELOPMENT Matthew\MR ep2d_MP03_DTI_T1_T2_DIFF_5slice'
-MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID)
-MP03.valueList=[]
+dicomPath=fr'C:\Research\MRI\MP_EPI\Phangtom\CIRC_Phantom_Jan8 CIRC_Phantom_Jan8\MP03'
+MP03=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03.imshow_corrected(valueList=range(1000))
+#%%
+MP03.go_cal_ADC()
+MP03.imshow_map(plot=False)
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
+#%%
+#SE
+import copy
+MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phangtom\CIRC_Phantom_Jan8 CIRC_Phantom_Jan8\DWI_6.npy')
+MP03_SE_tmp=np.flip(MP03_SE_data,axis=1)
+MP03_SE=copy.copy(MP03)
+MP03_SE._update_data(MP03_SE_tmp)
+MP03_SE.ID=str(MP03.ID+'SE')
+MP03_SE.bval=MP03.bval
+MP03_SE.bvec=MP03.bvec
+MP03_SE.imshow_corrected(valueList=range(1000))
+#%%
+MP03_SE.go_cal_ADC()
+crange=MP03_SE.crange
+cmap=MP03_SE.cmap
+plt.imshow(MP03_SE._map.squeeze(),vmin=crange[0],vmax=crange[1],cmap=cmap)
+
+
+
 # %%
 #Motion correction
 MP03.go_crop()
@@ -53,8 +78,8 @@ MP01_EPI.go_resize(scale=2)
 fig,axs=MP01_EPI.imshow_corrected(ID='MP01_T1_EPI_raw',plot=plot)
 
 #%%
-MP01_EPI.go_ir_fit()
-#%%
+finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=MP01_EPI._data,TIlist=MP01_EPI.valueList,searchtype='grid',invertPoint=0)
+MP01_EPI._map=finalMap
 MP01_EPI.imshow_map()
 
 #%%
@@ -73,7 +98,8 @@ img_dir= os.path.join(dirpath,f'MP01_SE')
 plt.savefig(img_dir)
 
 #%%
-
+dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI')
+dirpath=os.path.dirname(dicomPath)
 dicomPath=os.path.join(dirpath,f'MP02_T2_EPI')
 ID = dicomPath.split('\\')[-1]
 data,valueList,_=readFolder(dicomPath,sortBy='tval')
@@ -90,9 +116,9 @@ MP02_EPI.go_resize(scale=2)
 #MP02.go_moco()
 MP02_EPI.imshow_corrected(ID='MP02_EPI_raw',plot=True)
 # %%
-plt.style.use('classic')
-MP02_EPI.go_t2_fit()
-MP02_EPI.imshow_map()
+
+MP02_EPI._save_nib()
+print(MP02_EPI.valueList)
 #%%
 
 dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI')
