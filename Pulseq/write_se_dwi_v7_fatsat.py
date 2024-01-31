@@ -23,7 +23,7 @@ def bFactCalc(g,delta,DELTA):
 
 
 #%%
-seq_filename="se_dwi_pypulseq_TE60_FOV135_Nx50_b500_z.seq"
+seq_filename="external_Jan14_24_TE65_FatS_FOV135_Nx50_b500_z.seq"
 plot=bool
 write_seq=bool
 
@@ -32,8 +32,8 @@ write_seq=bool
 # ======
 seq = pp.Sequence()  # Create a new sequence object
 fov = 135e-3  # Define FOV and resolution
-Nx = 50
-Ny = 50
+Nx = 64
+Ny = 64
 slice_thickness=8e-3
 Nslices=1
 bFactor50=50
@@ -50,6 +50,7 @@ system = pp.Opts(
     rf_ringdown_time=20e-6,   #default
     rf_dead_time=100e-6,    #default
     adc_dead_time=20e-6,    #default
+    #Might need it.
     grad_raster_time=50*10e-6
 )
 
@@ -61,8 +62,9 @@ system = pp.Opts(
 rf, gz, _ = pp.make_sinc_pulse(
     flip_angle=np.pi / 2,
     system=system,
-    duration=3e-3,
-    phase_offset=90 * np.pi / 180,
+    duration=2e-3,
+    #Might need it
+    #phase_offset=90 * np.pi / 180,
     #Slice thickness is 8e-3
     slice_thickness=slice_thickness,
     apodization=0.5,
@@ -95,69 +97,112 @@ gx = pp.make_trapezoid(
     channel="x", system=system, flat_area=k_width, flat_time=readout_time
 )
 adc = pp.make_adc(
-    num_samples=Nx, system=system, phase_offset=90 * np.pi / 180, duration=gx.flat_time, delay=gx.rise_time
+    num_samples=Nx, system=system, duration=gx.flat_time, delay=gx.rise_time
 )
 
 # Pre-phasing gradients
-pre_time = 8e-4
+pre_time = 1e-3
 gz_reph = pp.make_trapezoid(
     channel="z", system=system, area=-gz.area / 2, duration=pre_time
 )
 # Do not need minus for in-plane prephasers because of the spin-echo (position reflection in k-space)
 gx_pre = pp.make_trapezoid(
-    channel="x", system=system, area=gx.area / 2, duration=pre_time
+    channel="x", system=system, area=-gx.area / 2, duration=pre_time
 )
 gy_pre = pp.make_trapezoid(
     channel="y", system=system, area=Ny / 2 * delta_k, duration=pre_time
 )
-
-# Phase blip in shortest possible time  #will be used in EPI blip up (Not use here)
-dur = math.ceil(2 * math.sqrt(delta_k / system.max_slew) / 10e-6) * 10e-6
-gy = pp.make_trapezoid(channel="y", system=system, area=delta_k, duration=dur)
-
+gx_pre,gy_pre=pp.align(right=gx_pre,left=gy_pre)
 
 tRef=2e-3   #Not sure make it bigger
 rfref_phase=0
-#`Refocusing pulse with spoiling gradients
-rf180 = pp.make_block_pulse(
+#Refocusing pulse with spoiling gradients
+rf180,gz180,_ = pp.make_sinc_pulse(
     flip_angle=np.pi,
     system=system,
     duration=2e-3,
-    phase_offset=rfref_phase,
-    use="refocusing"
+    slice_thickness=slice_thickness,
+    apodization=0.5,
+    time_bw_product=4,
+    phase_offset=np.pi/2,
+    use="refocusing",
+    return_gz=True,
+)
+_,gzr1_t,gzr1_a=pp.make_extended_trapezoid_area(
+    channel='z',
+    grad_start=0,
+    grad_end=gz180.amplitude,
+    area=2*gz.area,
+    system=system,
+)
+_,gzr2_t,gzr2_a=pp.make_extended_trapezoid_area(
+    channel='z',
+    grad_start=gz180.amplitude,
+    grad_end=0,
+    area=-gz_reph.area+2*gz.area,
+    system=system
+)
+#What is Trd in make_extended_trapezoud_area function? It was gzr1_t[3] in matlab version, here I used [-1]
+if (gz180.delay>(gzr1_t[2]-gz180.rise_time)):
+    gz180.delay=gz180.delay-(gzr1_t[2]-gz180.rise_time)
+else:
+    rf180.delay=rf180.delay+(gzr1_t[2]-gz180.rise_time)-gz180.delay;
+    gz180.delay=0
+gz180n=pp.make_extended_trapezoid(
+    channel='z',
+    system=system,
+    times=np.ceil((np.concatenate([gzr1_t,gzr1_t[2]+gz180.flat_time+gzr2_t])+gz180.delay)/system.grad_raster_time)*system.grad_raster_time,
+    amplitudes=np.concatenate([gzr1_a, gzr2_a]),
 )
 
-tRefwd=tRef+system.rf_ringdown_time+system.rf_dead_time
 
-gz_spoil = pp.make_trapezoid(
-    channel="z", system=system, area=gz.area * 2, duration=3 * pre_time
-)
+'''
+_,gzr_t,gzr_a=pp.make_extended_trapezoid_area(channel='z',
+    grad_start=gz180.amplitude,
+    grad_end=0,
+    area=-gz_reph.area+0.5*gz180.amplitude*gz180.fall_time,
+    system=system,
+    )'''
 
-# Calculate delay time
-#One Line of K space
-duration_to_center =  pp.calc_duration(
-    gx
-) + Ny / 2 * pp.calc_duration(gy)
-rf_center_incl_delay = rf.delay + pp.calc_rf_center(rf)[0]
-rf180_center_incl_delay = rf180.delay + pp.calc_rf_center(rf180)[0]
-
+#Create Fat-Sat Pulse
+B0=3
+sat_ppm=-3.45
+sat_freq=sat_ppm*1e-6*B0*system.gamma
+rf_fs=pp.make_gauss_pulse(
+    flip_angle=110*np.pi/180,
+    system=system,
+    duration=8e-3,
+    bandwidth=abs(sat_freq),
+    freq_offset=sat_freq,
+    )
+gz_fs=pp.make_trapezoid(channel='z',system=system,delay=pp.calc_duration(rf_fs),area=1/(1e-4))
 
 #Be sure to use math.ceil/np.ceil and divide by grad_raster_time and * grad_raster_time to match the hardware systems
-delay_TE1 = math.ceil((
-    TE / 2
-    - pp.calc_duration(gz)
-    + rf_center_incl_delay
-    - pre_time
-    - pp.calc_duration(gz_spoil)
-    - rf180_center_incl_delay
+rfCenterInclDelay=rf.delay + pp.calc_rf_center(rf)[0]
+rf180centerInclDelay=rf180.delay + pp.calc_rf_center(rf180)[0]
+delay_TE1tmp=math.ceil((
+    TE/2
+    - pp.calc_duration(rf,gz)
+    + rfCenterInclDelay
+    - rf180centerInclDelay
 )/system.grad_raster_time)*system.grad_raster_time
-delay_TE2 = math.ceil((
-    TE
-    - pp.calc_duration(rf180)
-    + rf180_center_incl_delay
-    - pp.calc_duration(gz_spoil)
-    - duration_to_center
+delay_TE2tmp=math.ceil((
+    TE/2
+    -pp.calc_duration(rf180,gz180n)
+    +rf180centerInclDelay
+    - 1/2*pp.calc_duration(gx)
 )/system.grad_raster_time)*system.grad_raster_time
+assert(delay_TE1tmp>=0)
+assert(delay_TE2tmp>=0)
+
+#Now we merge slice refocusing, TE delay and pre-phasers into a single block
+
+delayTE2=delay_TE2tmp+pp.calc_duration(rf180,gz180n)
+gx_pre.delay=0
+gx_pre.delay=delayTE2-pp.calc_duration(gx_pre) #gxPre may not overlap with the RF
+assert(gx_pre.delay >= pp.calc_duration(rf180))
+gy_pre.delay=pp.calc_duration(rf180)
+assert(pp.calc_duration(gy_pre)<=pp.calc_duration(gx_pre)) # gyPre may not shift the timing
 
 #Make sure delay time >0
 assert(delay_TE1>=0)
@@ -172,7 +217,7 @@ assert(delay_TE2>=0)
 '''
 
 small_delta=delay_TE2-math.ceil(system.max_grad/system.max_slew/system.grad_raster_time)*system.grad_raster_time
-big_delta=delay_TE1+pp.calc_duration(rf180,gz_spoil)
+big_delta=delay_TE1+pp.calc_duration(rf180,gz_reph)+pp.calc_duration(gz_spoil)
 #we define bFactCalc function below to eventually calculate time-optimal
 #gradients. for now we just abuse it with g=1 to give us the coefficient
 #b50
@@ -214,7 +259,7 @@ for gDiff in [gDiff_500_z]:
         seq.add_block(pp.make_delay(delay_TE1),gDiff)
         #Might not need gz_spoil if it has gDiff? 
         seq.add_block(gz_spoil)
-        seq.add_block(rf180)
+        seq.add_block(rf180,rz180)
         seq.add_block(gz_spoil)
         seq.add_block(pp.make_delay(delay_TE2),gDiff)
         seq.add_block(gx, adc)  # Read one line of k-space

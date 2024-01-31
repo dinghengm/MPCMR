@@ -209,7 +209,9 @@ def update_map(CIRC_NUMBER):
 if __name__=='__main__':
 
     from multiprocessing import Pool
-    CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
+    
+    #CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
+    CIRC_ID_List=['452','457','471','472','486','498','500']
     #CIRC_ID_List=['429','398']
     with Pool(5) as p:  # Create a pool of 5 processes
         results = p.map(update_map,CIRC_ID_List)

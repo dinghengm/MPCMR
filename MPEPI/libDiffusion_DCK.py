@@ -9,15 +9,13 @@
 #########################################################################################
 #
 # INSTALLATION PACKAGES PREREQ
-# install anaconda first
-#
-# pip install roipoly
-# pip install SimpleITK-SimpleElastix
-# pip install imgbasics
-# conda install tqdm <--should already be there
-# pip install ipyfilechooser
-# pip install opencv-python
-# python -m pip install statsmodels
+#    * install anaconda
+#    * from terminal, run conda activate base (or environment of choice)
+#    * pip install -U tensorly
+#    * pip install roipoly SimpleITK-SimpleElastix imgbasics ipyfilechooser pydicom plotly imageio opencv-python statsmodels
+#    * conda install scikit-image
+#    * conda install tqdm <--should already be there
+# Be sure to select the correct environment (e.g. base) for your kernel if running script interactively
 
 # %%
 import numpy as np
@@ -67,14 +65,18 @@ class diffusion:
                  bFilenameSorted=True, 
                  bMaynard=False,
                  ID=None,
-                 UIPath=None,datasets=[]): 
+                 UIPath=None,
+                 path=None): 
         
         '''
         Define class object and read in data
         
         Inputs:
          * data: select the dicom of the folder that holds all dicoms of diffusion data OR select a previous *.diffusion 
-         * ID: if you don't set ID number it will be taken from DICOM
+                 OR provide data with shape (Nx, Ny, Nz, Nd)
+         * bval: vector of bvals for each image in data with shape (Nd,) - required if data is not not .dcm / .diffusion
+         * bvec: array or bvecs for each image in data with shape (Nd, 3) - required if data is not not .dcm / .diffusion
+         * ID: if you don't set ID number it will be taken from DICOM (if possible) - required if data is not not .dcm / .diffusion
          * bMaynard: default (bMaynard=False) to process on own laptop, pass bMaynard=True to process on Maynard
         
         '''
@@ -88,6 +90,17 @@ class diffusion:
         else:
             self.bMaynard = False
 
+        if type(data) == np.ndarray:
+            
+            if np.any(bvec == None) or np.any(bval == None) or ID == None:
+                print("Must provide bval, bvec, and ID with data")
+            
+            else:
+                self.__initialize_parameters(data=data, bval=bval, bvec=bvec)
+                if path == None:
+                    path = os.getcwd()
+                self.path = path
+        
         if data is None:
             fc = self._uigetfile(pattern=['*.dcm', '*.DCM', '*.diffusion'],
                                  path = UIPath, 
@@ -105,10 +118,12 @@ class diffusion:
             else:
                 data, bval, bvec, datasets = self.dicomread(data, bFilenameSorted=bFilenameSorted)
                 self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
-                self.path = tmp
+                if path == None:
+                    self.path = tmp
+                else:
+                    self.path = path
 
-        else:
-            self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
+
         # this is junk code needed to initialize to allow for the interactive code to work
         # TO DO: 
         # this can be avoided if I modify roipoly library with the 
@@ -126,7 +141,7 @@ class diffusion:
 
 
     # initialize class parameters (needed to be a separate fcn for UI file browser callback)
-    def __initialize_parameters(self,data,bval=[],bvec=[],path='',datasets=[]):
+    def __initialize_parameters(self,data,bval=None,bvec=None,path='',datasets=[]):
         try:
             if len(data.shape) == 4:
                 [Nx, Ny, Nz, Nd] = data.shape
@@ -154,13 +169,13 @@ class diffusion:
             if self.ID == None:
                 self.ID = self.dcm_list[0].PatientID
 
-            if bval == []:
+            if np.all(bval == None):
                 self.bval = np.concatenate((np.zeros(1),
                                         np.ones(Nd)*500)) #default b = 500
             else:
                 self.bval = bval
 
-            if bvec == []:
+            if np.all(bvec == None):
                 self.bvec = np.concatenate((np.zeros([1,3]),
                                         self._getGradTable(Nd))) #default b = 500
             else:
@@ -209,15 +224,53 @@ class diffusion:
 # ========================================================================================================
         
     # crop class method
-    def go_crop(self, crop_data=None):
+    def go_crop(self, crop_data=None, cropzone=None):
         '''
         Click top left and bottom right corners on pop-up window to crop
         '''
         print('Cropping of data:')
-        self._data, self.cropzone = self._crop(data=crop_data)
-        self.Nx = self._data.shape[0]
-        self.Ny = self._data.shape[1]
-        self.shape = self._data.shape
+        
+        if crop_data is None:
+            crop_data = np.copy(self._data)
+        
+        if cropzone is None:
+            if self.Nz == 1:
+                Nx, Ny, Nd = crop_data.shape
+                img_crop, cropzone = imcrop(np.sum(crop_data / np.max(crop_data, axis=(0,1), keepdims=True), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nd)
+            else:
+                Nx, Ny, Nz, Nd = crop_data.shape
+                img_crop, cropzone = imcrop(np.sum(np.sum(crop_data / np.max(crop_data, axis=(0,1), keepdims=True), axis=2), axis=2))
+                Nx, Ny = img_crop.shape
+                shape = (Nx, Ny, Nz, Nd)
+        
+        else:
+            if self.Nz == 1:
+                Nx = cropzone[-1]
+                Ny = cropzone[-2]
+                Nd = crop_data.shape[-1]
+                shape = (Nx, Ny, Nd)
+            else:
+                Nx = cropzone[-1]
+                Ny = cropzone[-2]
+                Nz = crop_data.shape[-2]
+                Nd = crop_data.shape[-1]
+                shape = (Nx, Ny, Nz, Nd)
+                
+
+        # apply crop
+        data_crop = np.zeros(shape) #use updated shape
+        
+        for z in tqdm(range(self.Nz)):
+            for d in range(self.Nd):
+                data_crop[:,:,z,d] = imcrop(crop_data[:,:,z,d], cropzone)
+
+        self.Nx = data_crop.shape[0]
+        self.Ny = data_crop.shape[1]
+        self.shape = data_crop.shape
+        self._data = data_crop
+        self.cropzone = cropzone   
 
 
     # resize class method
@@ -715,11 +768,11 @@ class diffusion:
         Print gloabl LV MD and LV FA values
         '''
         
-        self.hat = calcHAT(self.ha, self.mask_lv)
+        self.hat, hat_std = calcHAT(self.ha, self.mask_lv, method="WLS", bReturnStd=True)
         
         print(f'Global LV MD: {np.mean(self.md[self.mask_lv]*1000): .2f} +/- {np.std(self.md[self.mask_lv]*1000): .2f} um^2/ms')
         print(f'Global LV FA: {np.mean(self.fa[self.mask_lv]): .2f} +/- {np.std(self.fa[self.mask_lv]): .2f}')
-        print(f'Global LV HAT: {self.hat: .2f}')
+        print(f'Global LV HAT: {self.hat: .2f} +/- {hat_std: .2f}')
 
 
     def export_stats(self, filename=None, path=None, ID=None, bGlobalOnly=True, bPerSlice=False, bMaynard=False, id=None): 
@@ -747,8 +800,8 @@ class diffusion:
         if filename is None:
             filename=path+'/' + ID + '.xlsx'
             
-        self.hat = calcHAT(self.ha, self.mask_lv)
-
+        self.hat, hat_std = calcHAT(self.ha, self.mask_lv, method="WLS", bReturnStd=True)
+        hat_mean_perslice, hat_std_perslice = calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100, method="WLS", bReturnStd=True)
         
         # export stats
         
@@ -756,20 +809,29 @@ class diffusion:
             if bPerSlice:
                 self.dti_stats = pd.DataFrame({
                     "ID": [ID],
-                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
-                    "Global MD (per slice)": [np.sum(self.md*self.mask_lv*1000, axis=(0,1)) / np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
+                    "Global mean MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global std MD": np.std(self.md[self.mask_lv]*1000),
+                    "Global mean MD (per slice)": [[np.mean((1000*self.md * self.mask_lv)[..., i][self.mask_lv[..., i] > 0]) for i in range(self.Nz)]],
+                    "Global std MD (per slice)": [[np.std((1000*self.md * self.mask_lv)[..., i][self.mask_lv[..., i] > 0]) for i in range(self.Nz)]],
                     "Global FA": np.mean(self.fa[self.mask_lv]),
-                    "Global FA (per slice)": [np.sum(self.fa*self.mask_lv, axis=(0,1)) /np.max([np.sum(self.mask_lv, axis=(0,1)), np.ones(self.Nz)])],
-                    "Global HAT": self.hat,
-                    "Global HAT (per slice)": [calcHAT_perslice(self.ha, self.mask_lv, NRadialSpokes=100)]
+                    "Global std FA": np.std(self.fa[self.mask_lv]),
+                    "Global mean FA (per slice)": [[np.mean((self.fa * self.mask_lv)[..., i][self.mask_lv[..., i] > 0]) for i in range(self.Nz)]],
+                    "Global std FA (per slice)": [[np.std((self.fa * self.mask_lv)[..., i][self.mask_lv[..., i] > 0]) for i in range(self.Nz)]],
+                    "Global mean HAT": self.hat,
+                    "Global std HAT": hat_std,
+                    "Global mean HAT (per slice)": [hat_mean_perslice],
+                    "Global std HAT (per slice)": [hat_std_perslice]
                 })    
             
             else:
                 self.dti_stats = pd.DataFrame({
                     "ID": [ID],
-                    "Global MD": np.mean(self.md[self.mask_lv]*1000),
-                    "Global FA": np.mean(self.fa[self.mask_lv]),
-                    "Global HAT": self.hat,
+                    "Global mean MD": np.mean(self.md[self.mask_lv]*1000),
+                    "Global std MD": np.std(self.md[self.mask_lv]*1000),
+                    "Global mean FA": np.mean(self.fa[self.mask_lv]),
+                    "Global std FA": np.std(self.fa[self.mask_lv]),
+                    "Global mean HAT": self.hat,
+                    "Global std HAT": hat_std
                 })
         
         else:
@@ -822,13 +884,10 @@ class diffusion:
     def dicomread(self, dirpath='.', bFilenameSorted=True):
         # print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
-        dicom_filelist=[]
-        for dirpath,dirs,files in  os.walk(dirpath):
-            for x in files:
-                path=os.path.join(dirpath,x)
-                if path.endswith('dcm') or path.endswith('DCM'):
-                    dicom_filelist.append(path)
-        datasets = [pydicom.dcmread(path)
+        dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
+        if dicom_filelist == []:
+            dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.DCM')
+        datasets = [pydicom.dcmread(os.path.join(dirpath, file))
                                 for file in tqdm(dicom_filelist)]
         
         i = 0
@@ -855,6 +914,7 @@ class diffusion:
             diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
+
         # check mosaic
         if 'MOSAIC' in datasets[0].ImageType:
             print('Detected Mosaic...')
@@ -1050,7 +1110,7 @@ class diffusion:
 
         if mask is None:
             mask = np.zeros(volume.shape)
-            for z in self.Nz:
+            for z in range(self.Nz):
                 mask[:,:,z] = self.lv_mask[z]
 
         fig = plt.figure()
@@ -1102,9 +1162,13 @@ class diffusion:
 
     # load the diffusion object
     def _load(self, filename=''):
-        with open(filename, 'rb') as inp:
-            importDiffusion = pickle.load(inp)
         
+        with open(filename, 'rb') as inp:
+            try:
+                importDiffusion = pickle.load(inp)
+            
+            except:               
+                importDiffusion = renamed_load(inp)
         try:
             # update all parameters that exist in new self imported from old diffusion object
             # this is preferred over a 'copy' since it will not overwrite new members but
@@ -1181,32 +1245,7 @@ class diffusion:
             fc.register_callback(callbackFunc)
 
         return fc
-
-    # crop function
-    def _crop(self, data=None, cropzone=None):
-        if data is None:
-            data = np.copy(self._data)
-        
-        if cropzone is None:
-            if self.Nz == 1:
-                Nx, Ny, Nd = data.shape
-                img_crop, cropzone = imcrop(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2))
-                Nx, Ny = img_crop.shape
-                shape = (Nx, Ny, Nd)
-            else:
-                Nx, Ny, Nz, Nd = data.shape
-                img_crop, cropzone = imcrop(np.sum(np.sum(data / np.max(data, axis=(0,1), keepdims=True), axis=2), axis=2))
-                Nx, Ny = img_crop.shape
-                shape = (Nx, Ny, Nz, Nd)
-
-        # apply crop
-        data_crop = np.zeros(shape) #use updated shape
-        
-        for z in tqdm(range(self.Nz)):
-            for d in range(self.Nd):
-                data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
-
-        return data_crop, cropzone    
+  
     
     def _resize(self,  data=None, newshape=None):
         if data is None:
@@ -1547,11 +1586,12 @@ def calcHA(pvec, CoM_stack, zvec=np.array([0.,0.,1.]) #normal axis
     return ha_map
 
 
-def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
+def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3, bReturnStd=False):
     Nx, Ny, Nz = ha.shape
     thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
-    hatMean = 0.
+    hatMean = []
     NTotalSpokes = 0
+    
     if method == "OLS":
         for z in range(Nz):
             if (not np.any(np.array(reject_slice)==z)) * (not np.all(lv_mask[:,:,z] == 0)):
@@ -1570,7 +1610,7 @@ def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Nit
                     if len(spoke) > 2:
                         transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
                         hat, _ = np.polyfit(transmuralDepth, spoke, 1)
-                        hatMean += hat
+                        hatMean.append(hat)
                         NTotalSpokes += 1
 
                         
@@ -1603,25 +1643,29 @@ def calcHAT(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Nit
 
                         hat = res_sm.params
                             
-                        hatMean += hat[1]
+                        hatMean.append(hat[1])
                         NTotalSpokes += 1
 
-                        
-    return hatMean / NTotalSpokes
+    if bReturnStd:
+        return np.mean(hatMean), np.std(hatMean)
+    
+    else:                    
+        return np.mean(hatMean)
 
 
 
 # calculate helix angle transmurality
-def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3):
+def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="WLS", Niter=3, bReturnStd=False):
     Nx, Ny, Nz = ha.shape
     thetaArray = np.linspace(0, 2*np.pi, NRadialSpokes)
     
-    HAT_perslice = []
+    HAT_mean_perslice = []
+    HAT_std_perslice = []
     
     if method == "OLS":
         
         for z in range(Nz):
-            hatMean = 0.
+            hatMean = []
             NTotalSpokes = 0
             
             if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
@@ -1640,16 +1684,17 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
                     if len(spoke) > 2:
                         transmuralDepth = np.linspace(0,100,len(spoke)) #0 to 100% endo to epi
                         hat, _ = np.polyfit(transmuralDepth, spoke, 1)
-                        hatMean += hat
+                        hatMean.append(hat)
                         NTotalSpokes += 1
             
-            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
+            HAT_mean_perslice.append(np.mean(hatMean))
+            HAT_std_perslice.append(np.std(hatMean))
         
         
     if method == "WLS":
         
         for z in range(Nz):
-            hatMean = 0.
+            hatMean = []
             NTotalSpokes = 0
             
             if (not np.any(np.array(reject_slice)==z)) * (not (np.all(lv_mask[:,:,z] == 0))):
@@ -1679,13 +1724,18 @@ def calcHAT_perslice(ha, lv_mask, NRadialSpokes=100, reject_slice=None, method="
 
                         hat = res_sm.params
                             
-                        hatMean += hat[1]
+                        hatMean.append(hat[1])
                         NTotalSpokes += 1
             
-            HAT_perslice.append(hatMean / np.max([NTotalSpokes, 1]))
+            HAT_mean_perslice.append(np.mean(hatMean))
+            HAT_std_perslice.append(np.std(hatMean))
         
                     
-    return HAT_perslice    
+    if bReturnStd:
+        return HAT_mean_perslice, HAT_std_perslice
+    
+    else:                    
+        return HAT_mean_perslice   
         
 
 
@@ -1814,4 +1864,18 @@ def imshow_old(volume):
     )
 
     fig.show()
+    
+# libDiffusion fix    
+import sys
+import io
+class RenameUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        renamed_module = module
+        if "libDiffusion" in module:
+            renamed_module = [mod for mod in sys.modules.keys() if "libDiffusion" in mod][0]
+
+        return super(RenameUnpickler, self).find_class(renamed_module, name)
+            
+def renamed_load(file_obj):
+    return RenameUnpickler(file_obj).load()
 # %%

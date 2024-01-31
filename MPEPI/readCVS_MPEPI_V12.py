@@ -92,7 +92,7 @@ df=pd.read_csv(os.path.join(dirname,r'mapping_Jan.csv'))
 #Read one only
 
 #CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00393','CIRC_00407']    
-CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405']    
+CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00407','CIRC_00419', 'CIRC_00429','CIRC_00452','CIRC_00446']    
 #CIRC_ID_list=['CIRC_00291','CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']              
 #ID_list=['MP01','MP02','MP03','T1-MOLLI','T2-FLASH']
 ID_list=['MP01','MP02','MP03','T1_MOLLI','T1_MOLLI_FB','T2_FLASH','T2_FLASH_FB']
@@ -675,6 +675,7 @@ print('MP01:',np.mean(all_data_T1[0]),'std:',np.std(all_data_T1[0]))
 print('T1:',np.mean(all_data_T1[1]),'std:',np.std(all_data_T1[1]))
 print('MP02:',np.mean(all_data_T2[0]),'std:',np.std(all_data_T2[0]))
 print('T2:',np.mean(all_data_T2[1]),'std:',np.std(all_data_T2[1]))
-#print('DWI:',np.mean(all_data_DWI),'std:',np.std(all_data_DWI))
+#%%
+print('DWI:',np.mean(all_data_DWI),'std:',np.std(all_data_DWI))
 
 # %%

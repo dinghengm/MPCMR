@@ -27,9 +27,9 @@ matplotlib.rcParams['savefig.dpi'] = 400
 #%%
 plot=True
 # %%
-CIRC_ID='CIRC_00446'
+CIRC_ID='CIRC_00457'
 img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
-saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024_moco",CIRC_ID)
+saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)
 if not os.path.exists(saved_img_root_dir):
             os.mkdir(saved_img_root_dir)
 
@@ -174,8 +174,8 @@ for ss,obj_T1 in enumerate(MP01_list):
     plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=3000)
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T1')
     plt.savefig(img_dir)
-    MP01_0._map=finalMap
-    obj_T1.save(filename=os.path.join(img_root_dir,f'{obj_T1.ID}_p.mapping'))
+    obj_T1._map=finalMap
+    #obj_T1.save(filename=os.path.join(img_root_dir,f'{obj_T1.ID}_p.mapping'))
 
 #%%
 MP02._update()

@@ -68,24 +68,14 @@ MP03=mapping(mapList[2])
 %matplotlib qt
 MP01._data=MP01._map[:,:,:,np.newaxis]
 MP01.go_crop()
-#%%
-Nx=2*MP01.Nx
-Ny=2*MP01.Ny
-newshape=(2*MP01.Nx,2*MP01.Ny,3,1)
-
-MP01._data=MP01._resize(data=MP01._data, newshape=newshape)
 # %%
 Cropzone=MP01.cropzone
 MP02._data=MP02._map[:,:,:,np.newaxis]
 MP02.cropzone=Cropzone
 MP02.go_crop()
-newshape=(Nx,Ny,3,1)
-
-MP02._data=MP02._resize(data=MP02._data, newshape=newshape)
 MP03._data=MP03._map[:,:,:,np.newaxis]
 MP03.cropzone=Cropzone
 MP03.go_crop()
-MP03._data=MP03._resize(data=MP03._data, newshape=newshape)
 
 # %%
 %matplotlib inline
@@ -167,31 +157,3 @@ for ind,map in enumerate([MP01,T1,MP02,T2]):
 
 plt.show()
 # %%
-plt.style.use('default')
-def imshowMap(obj,path,plot):
-    num_slice=obj.Nz
-    volume=obj._map
-    ID=str('map_' + obj.CIRC_ID + '_' + obj.ID)
-    crange=obj.crange
-    cmap=obj.cmap
-    figsize = (3.4*num_slice, 3)
-
-    fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
-    axes=axes.ravel()
-    for sl in range(num_slice):
-        axes[sl].set_axis_off()
-        im = axes[sl].imshow(volume[..., sl],vmin=crange[0],vmax=crange[1], cmap=cmap)
-    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.4, pad=0.018, aspect=8)
-    img_dir= os.path.join(path,f'{ID}')
-    if plot:
-        plt.savefig(img_dir)
-    pass
-#%%
-
-img_save_dir=os.path.join(img_root_dir,CIRC_ID)
-%matplotlib inline
-if not os.path.exists(img_save_dir):
-    os.makedirs(img_save_dir) 
-imshowMap(obj=MP02,plot=plot,path=img_save_dir)
-imshowMap(obj=MP01,plot=plot,path=img_save_dir)
-imshowMap(obj=MP03,plot=plot,path=img_save_dir)

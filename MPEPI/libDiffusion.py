@@ -67,7 +67,7 @@ class diffusion:
                  bFilenameSorted=True, 
                  bMaynard=False,
                  ID=None,
-                 UIPath=None): 
+                 UIPath=None,datasets=[]): 
         
         '''
         Define class object and read in data
@@ -107,6 +107,8 @@ class diffusion:
                 self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
                 self.path = tmp
 
+        else:
+            self.__initialize_parameters(data=data,bval=bval,bvec=bvec, datasets=datasets)
         # this is junk code needed to initialize to allow for the interactive code to work
         # TO DO: 
         # this can be avoided if I modify roipoly library with the 
@@ -820,10 +822,13 @@ class diffusion:
     def dicomread(self, dirpath='.', bFilenameSorted=True):
         # print('Path to the DICOM directory: {}'.format(dirpath))
         # load the data
-        dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.dcm')
-        if dicom_filelist == []:
-            dicom_filelist = fnmatch.filter(sorted(os.listdir(dirpath)),'*.DCM')
-        datasets = [pydicom.dcmread(os.path.join(dirpath, file))
+        dicom_filelist=[]
+        for dirpath,dirs,files in  os.walk(dirpath):
+            for x in files:
+                path=os.path.join(dirpath,x)
+                if path.endswith('dcm') or path.endswith('DCM'):
+                    dicom_filelist.append(path)
+        datasets = [pydicom.dcmread(path)
                                 for file in tqdm(dicom_filelist)]
         
         i = 0
@@ -850,7 +855,6 @@ class diffusion:
             diffBVal_str = ds[hex(int('0019',16)), hex(int('100c',16))].repval
             diffBValArray.append(float(diffBVal_str.split('\'')[1]))
             #print(datasets[0][hex(int('0019',16)), hex(int('100c',16))])
-
         # check mosaic
         if 'MOSAIC' in datasets[0].ImageType:
             print('Detected Mosaic...')

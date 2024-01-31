@@ -23,7 +23,7 @@ def bFactCalc(g,delta,DELTA):
 
 
 #%%
-seq_filename="se_dwi_pypulseq_TE60_FOV135_Nx50_b500_z.seq"
+seq_filename="external_Jan14_24_TE65_FOV135_Nx50_b500_z.seq"
 plot=bool
 write_seq=bool
 
@@ -50,6 +50,7 @@ system = pp.Opts(
     rf_ringdown_time=20e-6,   #default
     rf_dead_time=100e-6,    #default
     adc_dead_time=20e-6,    #default
+    #Might need it.
     grad_raster_time=50*10e-6
 )
 
@@ -62,6 +63,7 @@ rf, gz, _ = pp.make_sinc_pulse(
     flip_angle=np.pi / 2,
     system=system,
     duration=3e-3,
+    #Might need it
     phase_offset=90 * np.pi / 180,
     #Slice thickness is 8e-3
     slice_thickness=slice_thickness,
@@ -111,21 +113,21 @@ gy_pre = pp.make_trapezoid(
     channel="y", system=system, area=Ny / 2 * delta_k, duration=pre_time
 )
 
-# Phase blip in shortest possible time  #will be used in EPI blip up (Not use here)
-dur = math.ceil(2 * math.sqrt(delta_k / system.max_slew) / 10e-6) * 10e-6
-gy = pp.make_trapezoid(channel="y", system=system, area=delta_k, duration=dur)
-
 
 tRef=2e-3   #Not sure make it bigger
 rfref_phase=0
-#`Refocusing pulse with spoiling gradients
-rf180 = pp.make_block_pulse(
+#Refocusing pulse with spoiling gradients
+rf180 = pp.make_sinc_pulse(
     flip_angle=np.pi,
     system=system,
     duration=2e-3,
-    phase_offset=rfref_phase,
+    slice_thickness=slice_thickness,
+    apodization=0.5,
+    time_bw_product=4,
     use="refocusing"
 )
+
+rf_prep = pp.make_block_pulse(flip_angle=180 * np.pi / 180, duration=1e-3, system=system)
 
 tRefwd=tRef+system.rf_ringdown_time+system.rf_dead_time
 

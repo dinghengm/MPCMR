@@ -23,7 +23,7 @@ def bFactCalc(g,delta,DELTA):
 
 
 #%%
-seq_filename="se_dwi_pypulseq_TE60_FOV135_Nx50_b500_z.seq"
+#This version implement bandwidth to match with epi
 plot=bool
 write_seq=bool
 
@@ -31,14 +31,16 @@ write_seq=bool
 # SETUP
 # ======
 seq = pp.Sequence()  # Create a new sequence object
-fov = 135e-3  # Define FOV and resolution
-Nx = 50
-Ny = 50
+fov = 172e-3  # Define FOV and resolution
+fovx=400e-3
+fovy=172e-3
+Nx = 150
+Ny = 64
 slice_thickness=8e-3
 Nslices=1
 bFactor50=50
 bFactor500=500
-TE=65e-3
+TE=35e-3
 TR=8        #8s
 
 # Set system limits
@@ -50,19 +52,16 @@ system = pp.Opts(
     rf_ringdown_time=20e-6,   #default
     rf_dead_time=100e-6,    #default
     adc_dead_time=20e-6,    #default
-    grad_raster_time=50*10e-6
 )
 
 # ======
 # CREATE EVENTS
 # ======
 # Create 90 degree slice selection pulse and gradient
-#TODO Do I need Phase_OFF?
 rf, gz, _ = pp.make_sinc_pulse(
     flip_angle=np.pi / 2,
     system=system,
     duration=3e-3,
-    phase_offset=90 * np.pi / 180,
     #Slice thickness is 8e-3
     slice_thickness=slice_thickness,
     apodization=0.5,
@@ -73,11 +72,10 @@ rf, gz, _ = pp.make_sinc_pulse(
 # Define other gradients and ADC events
 delta_k = 1 / fov
 k_width = Nx * delta_k
-WD=2170
-
-#Here is the problem: TOO FAST can be 3e-3
-readout_time=4e-3   #TODO #Might be able to change to match bandwidth
-
+#WD=130*Nx
+#readout_time= 1/WD * Nx   #TODO #Might be able to change to match bandwidth
+readout_time=3.2e-4 
+#print(readout_time)
 '''
 #Can be G.maxGrad * Nx=readout_time
 
@@ -88,14 +86,12 @@ BW=BW_per_pixel*Nx
 dwell_time=math.ceil(1/BW/system.grad_raster_time)*system.grad_raster_time
 readout_time=dwell_time*Nx
 '''
-#Might also need Fat Saturation /#Flair
-
 
 gx = pp.make_trapezoid(
     channel="x", system=system, flat_area=k_width, flat_time=readout_time
 )
 adc = pp.make_adc(
-    num_samples=Nx, system=system, phase_offset=90 * np.pi / 180, duration=gx.flat_time, delay=gx.rise_time
+    num_samples=Nx, system=system, duration=gx.flat_time, delay=gx.rise_time
 )
 
 # Pre-phasing gradients
@@ -105,7 +101,7 @@ gz_reph = pp.make_trapezoid(
 )
 # Do not need minus for in-plane prephasers because of the spin-echo (position reflection in k-space)
 gx_pre = pp.make_trapezoid(
-    channel="x", system=system, area=gx.area / 2, duration=pre_time
+    channel="x", system=system, area=gx.area/2, duration=pre_time
 )
 gy_pre = pp.make_trapezoid(
     channel="y", system=system, area=Ny / 2 * delta_k, duration=pre_time
@@ -115,44 +111,37 @@ gy_pre = pp.make_trapezoid(
 dur = math.ceil(2 * math.sqrt(delta_k / system.max_slew) / 10e-6) * 10e-6
 gy = pp.make_trapezoid(channel="y", system=system, area=delta_k, duration=dur)
 
-
-tRef=2e-3   #Not sure make it bigger
-rfref_phase=0
 #`Refocusing pulse with spoiling gradients
-rf180 = pp.make_block_pulse(
-    flip_angle=np.pi,
-    system=system,
-    duration=2e-3,
-    phase_offset=rfref_phase,
-    use="refocusing"
+rf180,gz180,_ = pp.make_sinc_pulse(
+    flip_angle=np.pi, system=system, duration=3e-3,slice_thickness=slice_thickness,
+    apodization=0.5,
+    time_bw_product=4,
+    phase_offset=np.pi/2,
+    use="refocusing",
+    return_gz=True,
 )
-
-tRefwd=tRef+system.rf_ringdown_time+system.rf_dead_time
-
 gz_spoil = pp.make_trapezoid(
-    channel="z", system=system, area=gz.area * 2, duration=3 * pre_time
+    channel="z", system=system, area=gz.area * 3, duration=3 * pre_time
 )
 
 # Calculate delay time
-#One Line of K space
-duration_to_center =  pp.calc_duration(
-    gx
-) + Ny / 2 * pp.calc_duration(gy)
+duration_to_center = 1/2 *pp.calc_duration(gx)
 rf_center_incl_delay = rf.delay + pp.calc_rf_center(rf)[0]
 rf180_center_incl_delay = rf180.delay + pp.calc_rf_center(rf180)[0]
 
 
 #Be sure to use math.ceil/np.ceil and divide by grad_raster_time and * grad_raster_time to match the hardware systems
+#Put the pre x and pre y to after 90 and 180
 delay_TE1 = math.ceil((
     TE / 2
-    - pp.calc_duration(gz)
+    - pp.calc_duration(rf,gz)
     + rf_center_incl_delay
     - pre_time
     - pp.calc_duration(gz_spoil)
     - rf180_center_incl_delay
 )/system.grad_raster_time)*system.grad_raster_time
 delay_TE2 = math.ceil((
-    TE
+    TE / 2
     - pp.calc_duration(rf180)
     + rf180_center_incl_delay
     - pp.calc_duration(gz_spoil)
@@ -165,14 +154,14 @@ assert(delay_TE2>=0)
 
 '''
 % diffusion weithting calculation
-% delayTE2 is our window for small_delta
+% delayTE1 is our window for small_delta
 % delayTE1+delayTE2-delayTE2 is our big delta
 % we anticipate that we will use the maximum gradient amplitude, so we need
 % to shorten delayTE2 by gmax/max_sr to accommodate the ramp down
 '''
 
-small_delta=delay_TE2-math.ceil(system.max_grad/system.max_slew/system.grad_raster_time)*system.grad_raster_time
-big_delta=delay_TE1+pp.calc_duration(rf180,gz_spoil)
+small_delta=delay_TE1-2*math.ceil(system.max_grad/system.max_slew/system.grad_raster_time)*system.grad_raster_time
+big_delta=delay_TE1+pp.calc_duration(rf180,gz180,gz_spoil)
 #we define bFactCalc function below to eventually calculate time-optimal
 #gradients. for now we just abuse it with g=1 to give us the coefficient
 #b50
@@ -197,14 +186,16 @@ assert(pp.calc_duration(gDiff_500_x)<=delay_TE1)
 assert(pp.calc_duration(gDiff_500_x)<=delay_TE2)
 
 #Not used, the calculation has some issue.
-delayTR= math.ceil( (TR-pp.calc_duration(gz)  -pp.calc_duration(gx)/2 -TE +gz.fall_time +gz.flat_time/2 )/system.grad_raster_time)*system.grad_raster_time
+#delayTR= math.ceil( (TR-pp.calc_duration(gz)  -pp.calc_duration(gx)/2 -TE +gz.fall_time +gz.flat_time/2 )/system.grad_raster_time)*system.grad_raster_time
 
 #%%
 # ======
 # CONSTRUCT SEQUENCE
 # ======
 # Define sequence blocks
-#for gDiff in [gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]:
+
+outputSring=['50_x','50_y','50_z','500_x','500_y','500_z']
+#for ind,gDiff in enumerate([gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]):
 
 for gDiff in [gDiff_500_z]:
 
@@ -227,37 +218,38 @@ for gDiff in [gDiff_500_z]:
         #gx.amplitude = -gx.amplitude  # Reverse polarity of read gradient no need for se
         #seq.add_block(pp.make_delay(delayTR))
         #To simplify the sequence. hard code TR time
-        seq.add_block(pp.make_delay(8))
+        seq.add_block(pp.make_delay(TR))
+    seq_filename=f"se_dwi_pypulseq_TE65_FOV172_Nx64_{outputSring[ind]}_Jan21.seq"
 
 
-ok, error_report = seq.check_timing()
-if ok:
-    print("Timing check passed successfully")
-else:
-    print("Timing check failed! Error listing follows:")
-    print(error_report)
+    ok, error_report = seq.check_timing()
+    if ok:
+        print("Timing check passed successfully")
+    else:
+        print("Timing check failed! Error listing follows:")
+        print(error_report)
 
-#%%
-# ======
-# VISUALIZATION
-# ======
-if plot:
-    #Plot first readout. 
-    seq.plot(time_range=(0,0.1))
-    #See next readout
-    #seq.plot(time_range=(8,8.1))
 
-#%%
-#Sometimes it fails.
-#TE and TR calculation sometimes are wrong based on github's pulseq.
-rep=seq.test_report()
-print(rep)
+    # ======
+    # VISUALIZATION
+    # ======
+    if plot:
+        #Plot first readout. 
+        seq.plot(time_range=(0,0.1))
+        #See next readout
+        #seq.plot(time_range=(8,8.1))
 
-#%%
-# =========
-# WRITE .SEQ
-# =========
-if write_seq:
-    seq.write(seq_filename)
+
+    #Sometimes it fails.
+    #TE and TR calculation sometimes are wrong based on github's pulseq.
+    rep=seq.test_report()
+    print(rep)
+
+
+    # =========
+    # WRITE .SEQ
+    # =========
+    if write_seq:
+        seq.write(seq_filename)
 
 # %%

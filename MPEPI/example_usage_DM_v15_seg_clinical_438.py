@@ -95,21 +95,22 @@ if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
 #%%
 
-img_save_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023',CIRC_ID)
+#img_save_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023',CIRC_ID)
 if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
 mapList=[]
 for dirpath,dirs,files in  os.walk(img_root_dir):
     for x in files:
         path=os.path.join(dirpath,x)
-        if path.endswith('p.mapping'):
+        if path.endswith('m.mapping'):
             if CIRC_ID in os.path.basename(path):
                 mapList.append(path)
 #Running 438
-T1_MP01=mapping(mapList[-4])
-T1=mapping(mapList[-3])
-T1_Post=mapping(mapList[-2])
-T2=mapping(mapList[-1])
+MP01=mapping(mapList[-4])
+MP01_post=mapping(mapList[-3])
+MP02=mapping(mapList[-2])
+MP03=mapping(mapList[-1])
+
 print(mapList[-4::])
 
 
