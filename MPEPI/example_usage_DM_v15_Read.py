@@ -27,7 +27,9 @@ matplotlib.rcParams['savefig.dpi'] = 400
 #%%
 plot=True
 # %%
-CIRC_ID='CIRC_00446'
+CIRC_ID_List=['472','486','498','500']
+CIRC_NUMBER=CIRC_ID_List[3]
+CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
 saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)
 if not os.path.exists(saved_img_root_dir):
@@ -90,6 +92,7 @@ for obj in MP01_list:
 #Get the shape of all data, and then replace the data with corrected
 #Read the data
 #Renew the dataset:
+%matplotlib qt
 for ss,obj_T1 in enumerate(MP01_list):
     key=f'moco_Slice{ss}'
     moco_data_single_slice=np.transpose(moco_data[key],(2,1,0))
@@ -122,9 +125,9 @@ for obj in MPs_list:
 #Replace the between frames with the original frames
 #%%
 #Cancel some frames
-MP01_0._delete(d=[5])
-MP01_1._delete(d=[4])
-MP01_2._delete(d=[4])
+MP01_0._delete(d=[4,-1])
+MP01_1._delete(d=[2,-1])
+MP01_2._delete(d=[-1])
 MP01_0.imshow_corrected(ID=f'MP01_Slice0_2',plot=plot,path=img_root_dir)
 MP01_1.imshow_corrected(ID=f'MP01_Slice1_2',plot=plot,path=img_root_dir)
 MP01_2.imshow_corrected(ID=f'MP01_Slice2_2',plot=plot,path=img_root_dir)
@@ -174,7 +177,7 @@ for ss,obj_T1 in enumerate(MP01_list):
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T1')
     plt.savefig(img_dir)
     MP01_0._map=finalMap
-    obj_T1.save(filename=os.path.join(img_root_dir,f'{obj_T1.ID}_p.mapping'))
+    obj_T1.save(filename=os.path.join(img_root_dir,f'{obj_T1.ID}_m.mapping'))
 
 #%%
 MP02._update()
@@ -198,7 +201,7 @@ for ss in range(MP02.Nz):
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T2')
     
     plt.savefig(img_dir)
-MP02.save(filename=os.path.join(img_root_dir,f'{MP02.ID}_p.mapping'))
+MP02.save(filename=os.path.join(img_root_dir,f'{MP02.ID}_m.mapping'))
 #%%
 map_data=np.copy(MP02._map)
 map_data[:,:,0]=np.squeeze(MP01_0._map)
@@ -213,7 +216,8 @@ for ss in range(MP03.Nz):
     plt.imshow(MP03.ADC[:,:,ss],cmap='hot',vmin=0,vmax=3)
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_DWI')
     plt.savefig(img_dir)
-MP03.save(filename=os.path.join(img_root_dir,f'{MP03.ID}_p.mapping'))
+MP03.save(filename=os.path.join(img_root_dir,f'{MP03.ID}_m.mapping'))
+MP01.save(filename=os.path.join(img_root_dir,f'{MP01.ID}_m.mapping'))
 
 #%%
 %matplotlib qt 

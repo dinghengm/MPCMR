@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 image_default_root=r'C:\Research\MRI\MP_EPI\Phangtom'
 image_dir=os.path.join(image_default_root,'CIRC_Phantom_Jan8 CIRC_Phantom_Jan8')
-filename=os.path.join(image_dir,'meas_MID00762_FID22423_pulseq_se_dwi_x')
+filename=os.path.join(image_dir,'meas_MID00768_FID22429_pulseq_se_dwi_x_50_500')
 multi_twix = twixtools.read_twix(filename)
 
 def read_image_data(filename):

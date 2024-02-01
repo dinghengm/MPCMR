@@ -2,7 +2,7 @@
 # Import libraries ######################################################################
 #########################################################################################
 # all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
-%matplotlib qt
+%matplotlib inline
 import sys
 sys.path.append('../MPEPI')
                   
@@ -19,40 +19,144 @@ from imgbasics import imcrop
 from skimage.transform import resize as imresize
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-defaultPath= r'C:\Research\MRI\MP_EPI'
+defaultPath= r'C:\Research\MRI\MP_EPI\Phantom'
 plt.rcParams['savefig.dpi'] = 500
-from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
 plot=False
 
 # %%
-
-
-
+#Phantom Run1
 #CIRC_ID='CIRC_Phantom_Aug9'
 CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
-#dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI\MR000000.dcm')
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_1')
 #dirpath=os.path.dirname(dicomPath)
-dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
-MP03=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
-MP03.imshow_corrected(valueList=range(1000))
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M2.imshow_corrected(valueList=range(1000))
 #%%
-MP03.go_cal_ADC()
-MP03.imshow_map(plot=False)
+MP03_M2.go_cal_ADC()
+MP03_M2.imshow_map(plot=False)
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
+#%%
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M0_1')
+#dirpath=os.path.dirname(dicomPath)
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M0=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M0.imshow_corrected(valueList=range(1000))
+#%%
+MP03_M0.go_cal_ADC()
+MP03_M0.imshow_map(plot=False)
 #%%
 #SE
 import copy
-MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\DWI_6_Jan22_b501.npy')
+MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\DWI_6_Jan22_b50_1.npy')
 MP03_SE_tmp=np.flip(MP03_SE_data,axis=1)
-MP03_SE=copy.copy(MP03)
+MP03_SE=copy.copy(MP03_M2)
 MP03_SE._update_data(MP03_SE_tmp)
-MP03_SE.ID=str(MP03.ID+'SE')
-MP03_SE.bval=MP03.bval
-MP03_SE.bvec=MP03.bvec
+MP03_SE.ID=str(MP03_M2.ID+'SE')
+MP03_SE.bval=MP03_M2.bval
+MP03_SE.bvec=MP03_M2.bvec
 MP03_SE.imshow_corrected(valueList=range(1000))
 plt.show()
+#%%
+MP03_SE.go_cal_ADC()
+crange=MP03_SE.crange
+cmap=MP03_SE.cmap
+plt.imshow(MP03_SE._map.squeeze(),vmin=0,vmax=3,cmap=cmap)
+
+#%%
+##########################Phantom2####################################
+#CIRC_ID='CIRC_Phantom_Aug9'
+CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_2','MR ep2d_MP03_DWI_Z_F_E')
+#dirpath=os.path.dirname(dicomPath)
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M2.imshow_corrected(valueList=range(1000))
+#%%
+MP03_M2.go_cal_ADC()
+MP03_M2.imshow_map(plot=False)
+#MP03 = mapping(data=fr'{dicomPath}_p.mapping')
+#%%
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M0_2','MR ep2d_MP03_DWI_Z_M0_F_E')
+#dirpath=os.path.dirname(dicomPath)
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M0=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M0.imshow_corrected(valueList=range(1000))
+#%%
+MP03_M0.go_cal_ADC()
+MP03_M0.imshow_map(plot=False)
+#%%
+#SE
+import copy
+MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\DWI_6_Jan22_b50_2.npy')
+MP03_SE_tmp=np.flip(MP03_SE_data,axis=1)
+MP03_SE=copy.copy(MP03_M2)
+MP03_SE._update_data(MP03_SE_tmp)
+MP03_SE.ID=str(MP03_M2.ID+'SE')
+MP03_SE.bval=MP03_M2.bval
+MP03_SE.bvec=MP03_M2.bvec
+MP03_SE.imshow_corrected(valueList=range(1000))
+plt.show()
+#%%
+MP03_SE.go_cal_ADC()
+crange=MP03_SE.crange
+cmap=MP03_SE.cmap
+plt.imshow(MP03_SE._map.squeeze(),vmin=0,vmax=3,cmap=cmap)
+
+#%%
+##########################Phantom2####################################
+#CIRC_ID='CIRC_Phantom_Aug9'
+CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_3')
+#dirpath=os.path.dirname(dicomPath)
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M2.imshow_corrected(valueList=range(1000))
+#%%
+MP03_M2.go_cal_ADC()
+MP03_M2.imshow_map(plot=False)
+#MP03 = mapping(data=fr'{dicomPath}_p.mapping')
+#%%
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M0_3')
+#dirpath=os.path.dirname(dicomPath)
+#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
+MP03_M0=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+MP03_M0.imshow_corrected(valueList=range(1000))
+#%%
+MP03_M0.go_cal_ADC()
+MP03_M0.imshow_map(plot=False)
+#%%
+#SE
+import copy
+MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\DWI_6_Jan22_b50_3.npy')
+MP03_SE_tmp=np.flip(MP03_SE_data,axis=1)
+MP03_SE=copy.copy(MP03_M2)
+MP03_SE._update_data(MP03_SE_tmp)
+MP03_SE.ID=str(MP03_M2.ID+'SE')
+MP03_SE.bval=MP03_M2.bval
+MP03_SE.bvec=MP03_M2.bvec
+MP03_SE.imshow_corrected(valueList=range(1000))
+plt.show()
+
+#%%
+MP03_SE.go_cal_ADC()
+crange=MP03_SE.crange
+cmap=MP03_SE.cmap
+plt.imshow(MP03_SE._map.squeeze(),vmin=0,vmax=3,cmap=cmap)
+#%%
+import copy
+MP03_SE_data=np.load('C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\DWI_6_Jan22_b50_15.npy')
+MP03_SE_tmp=np.flip(MP03_SE_data,axis=1)
+MP03_SE=copy.copy(MP03_M2)
+MP03_SE._update_data(MP03_SE_tmp)
+MP03_SE.ID=str(MP03_M2.ID+'SE')
+MP03_SE.bval=np.array([50,50,50,500,500,500])
+MP03_SE.bvec=MP03_M2.bvec[0:6]
+MP03_SE.imshow_corrected(valueList=range(1000))
+plt.show()
+
 #%%
 MP03_SE.go_cal_ADC()
 crange=MP03_SE.crange

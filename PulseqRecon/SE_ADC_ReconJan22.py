@@ -1,14 +1,18 @@
 #%%
+
+##############If you only wants to generate the np file, just run first ,4 and the rest cells#################
 import numpy as np
 import twixtools
 import os
 import matplotlib.pyplot as plt
 
 image_default_root=r'C:\Research\MRI\MP_EPI\Phantom'
-image_dir=os.path.join(image_default_root,'CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final')
-filename=os.path.join(image_dir,'meas_MID00332_FID25035_external_b50')
-multi_twix = twixtools.read_twix(filename)
+#NO3
+image_dir=os.path.join(image_default_root,'CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final','SE_DWI_1')
+
 #%%
+filename=os.path.join(image_dir,'meas_MID00364_FID25067_external_b50_3')
+multi_twix = twixtools.read_twix(filename)
 def read_image_data(filename):
     out = []
     for mdb in twixtools.read_twix(filename)[-1]['mdb']:
@@ -81,7 +85,7 @@ for i in range(6):
 
 
 #%%
-np.save(os.path.join(image_dir,'DWI_6_Jan22_b501'),b_images_maptitute)
+np.save(os.path.join(image_dir,'DWI_6_Jan22_b50_1'),b_images_maptitute)
 
 print(np.shape(b_images_maptitute))
 # %%
