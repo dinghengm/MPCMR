@@ -22,7 +22,7 @@ import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
 #%%
 boolenTest=input('Would you like to save you Plot? "Y" and "y" to save')
-if boolenTest.lower == 'y':
+if boolenTest.lower() == 'y':
     plot=True
 else:
     plot=False
@@ -37,7 +37,7 @@ saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)
 if not os.path.exists(saved_img_root_dir):
     os.mkdir(saved_img_root_dir)
 
-img_root_dir = saved_img_root_dir
+#img_root_dir = saved_img_root_dir
 # image root directory
 # Statas saved 
 stats_file = os.path.join(defaultPath, "MPEPI_stats_v16.csv") 
@@ -134,12 +134,34 @@ for ss,obj_T1 in enumerate(MP01_post_list):
     Ndtmp_start=endList[ss]
     obj_T1._update_data(moco_data_single_slice[:,:,np.newaxis,Ndtmp_start::])
     obj_T1.go_crop_Auto()
-    obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped',plot=plot,path=saved_img_root_dir)
-    obj_T1.go_create_GIF(path_dir=str(saved_img_root_dir))
+    obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped_post',plot=plot,path=saved_img_root_dir)
+    #obj_T1.go_create_GIF(path_dir=str(saved_img_root_dir))
     obj_T1._update_data(moco_data_single_slice[:,:,Ndtmp_start::])
     print(obj_T1.ID,np.shape(obj_T1._data))
     print('valueList=',obj_T1.valueList)    #print('valueList=',obj.valueList)
 
+#%%
+for ss,obj_T1 in enumerate(MP01_list):
+    valueArray=np.array(obj_T1.valueList)
+    arrayInd=np.where(np.logical_and(valueArray>=700,valueArray<=1500))
+    obj_T1._data[...,arrayInd]=obj_T1._raw_data[...,arrayInd]
+    obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped_updated',plot=plot,path=saved_img_root_dir)
+#%%
+MP01_post_0.valueList= [110.0, 190.0, 440.0, 940.0, 1240.0, 2140.0, 3140.0]
+for ss,obj_T1 in enumerate(MP01_post_list):
+    valueArray=np.array(obj_T1.valueList)
+    arrayInd=np.where(np.logical_and(valueArray>=300,valueArray<=700))
+    obj_T1._data[...,arrayInd]=obj_T1._raw_data[...,arrayInd]
+    obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_post_Cropped_updated',plot=plot,path=saved_img_root_dir)
+
+#%%
+#488 only
+#MP01_0._delete(d=[4,-1])
+#MP01_1._delete(d=[2,-1])
+#MP01_2._delete(d=[-1])
+MP01_0.imshow_corrected(ID=f'MP01_Slice0_2',plot=plot,path=saved_img_root_dir)
+MP01_1.imshow_corrected(ID=f'MP01_Slice1_2',plot=plot,path=saved_img_root_dir)
+MP01_2.imshow_corrected(ID=f'MP01_Slice2_2',plot=plot,path=saved_img_root_dir)
 #%%
 #Save the file as M
 stats_file = os.path.join(os.path.dirname(saved_img_root_dir), "MPEPI_stats_v2.csv") 
@@ -170,9 +192,13 @@ for obj in MPs_list:
         cvsdata.to_csv(stats_file, index=False, header=False, mode='a')
     else:
         cvsdata.to_csv(stats_file, index=False)
+
+#%%
+
 #%%
 #GO_resize and go correct the images:
 %matplotlib qt
+
 MP02.go_crop()
 cropzone=MP02.cropzone
 MP02.go_resize()
@@ -180,12 +206,14 @@ for obj in [MP01_0,MP01_1,MP01_2,MP01_post_0,MP01_post_1,MP01_post_2,MP03,MP01,M
     obj.cropzone=cropzone
     obj.go_crop()
     obj.go_resize()
+    obj._update()
 
 #%%
 #---...-----
 #Please calculate the maps in a loop
 #%%
 #Calculate the T1 maps
+%matplotlib qt
 for ss,obj_T1 in enumerate(MP01_list):
     finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=4)
     plt.figure()
@@ -199,10 +227,10 @@ for ss,obj_T1 in enumerate(MP01_list):
 #%%
 #Calculate the T1post maps
 for ss,obj_T1 in enumerate(MP01_post_list):
-    finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid')
+    finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=2)
     plt.figure()
     plt.axis('off')
-    plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=1600)
+    plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=1000)
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T1_post')
     plt.savefig(img_dir)
     obj_T1._map=finalMap
@@ -212,12 +240,12 @@ for ss,obj_T1 in enumerate(MP01_post_list):
 
 MP02._update()
 MP02.go_create_GIF(path_dir=str(img_root_dir))
-MP02.imshow_corrected(ID=f'MP02_Corrected',plot=plot,path=img_root_dir)
+MP02.imshow_corrected(ID=f'MP02_Cropped',plot=plot,path=img_root_dir)
 
 #%%
 MP03._update()
 MP03.go_create_GIF(path_dir=str(img_root_dir))
-MP03.imshow_corrected(ID=f'MP03_Corrected',valueList=MP03.bval,plot=plot,path=img_root_dir)
+MP03.imshow_corrected(ID=f'MP03_Cropped',valueList=MP03.bval,plot=plot,path=img_root_dir)
 MP03.go_cal_ADC()
 #%%
 MP02.go_t2_fit()
@@ -231,19 +259,22 @@ for ss in range(MP02.Nz):
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T2')
     
     plt.savefig(img_dir)
-MP02.save(filename=os.path.join(img_root_dir,f'{MP02.ID}_p.mapping'))
+MP02.save(filename=os.path.join(img_root_dir,f'{MP02.ID}_m.mapping'))
 #%%
 map_data=np.copy(MP02._map)
 map_data[:,:,0]=np.squeeze(MP01_0._map)
 map_data[:,:,1]=np.squeeze(MP01_1._map)
 map_data[:,:,2]=np.squeeze(MP01_2._map)
 MP01._map= np.squeeze(map_data)
+MP01.save(filename=os.path.join(img_root_dir,f'{MP01.ID}_m.mapping'))
 #%%
 map_data=np.copy(MP02._map)
 map_data[:,:,0]=np.squeeze(MP01_post_0._map)
 map_data[:,:,1]=np.squeeze(MP01_post_1._map)
 map_data[:,:,2]=np.squeeze(MP01_post_2._map)
 MP01_post._map= np.squeeze(map_data)
+MP01_post.save(filename=os.path.join(img_root_dir,f'{MP01_post.ID}_m.mapping'))
+
 #%%
 Nx,Ny,Nz,Nd=np.shape(MP03._data)
 for ss in range(MP03.Nz):
@@ -252,12 +283,13 @@ for ss in range(MP03.Nz):
     plt.imshow(MP03.ADC[:,:,ss],cmap='hot',vmin=0,vmax=3)
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_DWI')
     plt.savefig(img_dir)
-MP03.save(filename=os.path.join(img_root_dir,f'{MP03.ID}_p.mapping'))
+MP03.save(filename=os.path.join(img_root_dir,f'{MP03.ID}_m.mapping'))
 
 #%%
 %matplotlib qt 
 
 #%%
+plt.style.use('default')
 def imshowMap(obj,path,plot):
     num_slice=obj.Nz
     volume=obj._map
@@ -300,8 +332,8 @@ MP03.show_calc_stats_LV()
 MP01._update_mask(MP02)
 MP01.show_calc_stats_LV()
 
-MP01_post._update_mask(MP02)
-MP01_post.show_calc_stats_LV()
+#MP01_post._update_mask(MP02)
+#MP01_post.show_calc_stats_LV()
 #%%
 def testing_plot(obj1,obj2,obj3,obj4,sl):
     
@@ -413,12 +445,12 @@ plt.savefig(os.path.join(img_save_dir,f'{MP01.CIRC_ID}_moco_first'))
 #%%
 %matplotlib inline
 plt.style.use('default')
-testing_reseg(MP01,MP02,MP03,MP01_post)
+testing_reseg(MP01,MP03,MP02,MP03)
 
 # %% View Maps Overlay
 
 %matplotlib inline
-
+img_save_dir=saved_img_root_dir
 # view HAT mask
 num_slice = MP01.Nz 
 figsize = (3.4*num_slice, 3)
@@ -427,12 +459,13 @@ figsize = (3.4*num_slice, 3)
 fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
 crange=MP01.crange
 cmap=MP01.cmap
-base_sum=np.array([MP02._data[:, :, :, 0],MP03._data[:, :, :, 0]])
-base_im = np.mean(base_sum,axis=0)
-
+#base_sum=np.array([MP02._data[:, :, :, 0:6],MP03._data[:, :, :, 0:6]])
+#base_im = np.mean(base_sum,axis=0)
+base_sum=np.concatenate([MP02._data[:, :, :, 0:6],MP03._data[:, :, :,  0:12]],axis=-1)
+base_im = np.mean(base_sum,axis=-1)
 for sl in range(num_slice):
     axes[sl].set_axis_off()
-    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.7))
+    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.8))
     im = axes[sl].imshow(MP01._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap, alpha=1.0*MP01.mask_lv[...,sl])
 #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
 if plot:
@@ -443,11 +476,11 @@ plt.close()
 fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
 crange=MP02.crange
 cmap=MP02.cmap
-base_im = MP03._data[..., 0]
+#ase_im = MP02._data[..., 0]
 
 for sl in range(num_slice):
     axes[sl].set_axis_off()
-    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.7))
+    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.8))
     im = axes[sl].imshow(MP02._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap, alpha=1.0*MP02.mask_lv[...,sl])
 #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
 if plot:
@@ -458,11 +491,11 @@ plt.close()
 fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
 crange=MP03.crange
 cmap=MP03.cmap
-base_im = MP03._data[..., 0]
+#base_im = MP03._data[..., 0]
 
 for sl in range(num_slice):
     axes[sl].set_axis_off()
-    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.7))
+    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.8))
     im = axes[sl].imshow(MP03._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap, alpha=1.0*MP03.mask_lv[...,sl])
 #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
 if plot:
@@ -474,11 +507,11 @@ fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_
 MP01_post.crange=[0,1600]
 crange=MP01_post.crange
 cmap=MP01_post.cmap
-base_im = MP01_post._data[..., 0]
+#base_im = MP01_post._data[..., 0]
 
 for sl in range(num_slice):
     axes[sl].set_axis_off()
-    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.7))
+    axes[sl].imshow(base_im[...,sl], cmap="gray", vmax=np.max(base_im[...,sl]*0.8))
     im = axes[sl].imshow(MP01_post._map[..., sl], vmin=crange[0], vmax=crange[1], cmap='magma', alpha=1.0*MP01_post.mask_lv[...,sl])
 #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
 if plot:
@@ -489,7 +522,7 @@ plt.show()
 MP02.show_calc_stats_LV()
 MP03.show_calc_stats_LV()
 MP01.show_calc_stats_LV()
-MP01_post.show_calc_stats_LV()
+#MP01_post.show_calc_stats_LV()
 #%%
 MP01.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Jan.csv',crange=[0,3000])
 MP02.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Jan.csv',crange=[0,150])

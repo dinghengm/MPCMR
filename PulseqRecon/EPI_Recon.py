@@ -25,9 +25,9 @@ def rms_comb(sig, axis=1):
     return np.sqrt(np.sum(abs(sig)**2, axis))
 
 #%%
-image_default_root=r'C:\Research\MRI\MP_EPI\Phangtom'
-image_dir=os.path.join(image_default_root,'CIRC_Phantom_Dec_21_DWI_SE')
-filename=os.path.join(image_dir,'meas_MID00079_FID20297_ep2d_MP03_DWI_Z')
+image_default_root=r'C:\Research\MRI\MP_EPI\Phantom'
+image_dir=os.path.join(image_default_root,'CIRC_Phantom_Feb_9_Diff_SE_EPI')
+filename=os.path.join(image_dir,'meas_MID01537_FID27999_ep2d_MP03_DWI_Z.dat')
 epi_map = twixtools.map_twix(filename)
 
 im_array = epi_map[-1]['image']
@@ -40,8 +40,8 @@ im_array.flags['remove_os'] = True
 #['Rep', 'Sli', 'Lin', 'Cha', 'Col']
 
 data = im_array[:].squeeze()
-image_50_k=data[0,2,:,:,:]
-image_500_k=data[3,2,:,:,:]
+image_50_k=data[0,0,:,:,:]
+image_500_k=data[3,0,:,:,:]
 #There fore we have to use 0-5 for different repetition
 
 # reconstruct the data

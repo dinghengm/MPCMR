@@ -25,10 +25,10 @@ import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
 def go_generate_maps(CIRC_NUMBER):
-    CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
+    CIRC_ID=f'CIRC_00{int(CIRC_NUMBER)}'
     print(f'Running{CIRC_ID}')
-    img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
-    img_save_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023')
+    img_root_dir = os.path.join(defaultPath, "saved_ims_v2_Feb_5_2024","WITH8000",CIRC_ID)
+    img_save_dir=img_root_dir
     #Read the MP01-MP03
     mapList=[]
     for dirpath,dirs,files in  os.walk(img_root_dir):
@@ -48,20 +48,12 @@ def go_generate_maps(CIRC_NUMBER):
     MP01_list=[MP01_0,MP01_1,MP01_2]
     MPs_list=[MP01,MP02,MP03]
 
-    for obj in MPs_list:
-        obj._data=np.copy(obj._raw_data)
-        #obj.go_resize()
-        obj._update()
-    for obj in MP01_list:
-        obj._data=np.copy(obj._raw_data)
-        #obj.go_resize()
-        obj._update()
     for ss,obj_T1 in enumerate(MP01_list):
         finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=4)
         plt.figure()
         plt.axis('off')
         plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=3000)
-        img_dir= os.path.join(img_save_dir,f'{obj.CIRC_ID}_MP01_Slice{ss}_T1')
+        img_dir= os.path.join(img_save_dir,f'{obj_T1.CIRC_ID}_MP01_Slice{ss}_T1')
         plt.savefig(img_dir)
         plt.close()
         obj_T1._map=finalMap
@@ -97,8 +89,8 @@ def go_generate_maps(CIRC_NUMBER):
 
 if __name__=='__main__':
     from multiprocessing import Pool
-    CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
-    #CIRC_ID_List=['429','398']
+    CIRC_ID_List=[446,452,429,419,407,405,398,382,381,373,457,471,472,486,498,500]
     with Pool(5) as p:  # Create a pool of 5 processes
         results = p.map(go_generate_maps,CIRC_ID_List)
+
     

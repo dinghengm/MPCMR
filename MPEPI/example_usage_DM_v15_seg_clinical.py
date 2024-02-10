@@ -115,7 +115,7 @@ map=mapping(data=np.expand_dims(data,axis=-1),ID='T2_FLASH_FB',CIRC_ID=CIRC_ID)
 
 map.shape=np.shape(map._data)
 map.go_crop()
-map.go_resize(scale=2)
+#map.go_resize(scale=2)
 map.shape=np.shape(map._data)
 cropzone=map.cropzone
 #%%
@@ -135,7 +135,7 @@ cropzone=map.cropzone
 map.cropzone=cropzone
 map.shape=np.shape(map._data)
 map.go_crop()
-map.go_resize(scale=2)
+#map.go_resize(scale=2)
 map.shape=np.shape(map._data)
 #%%
 ##############################T1#################################

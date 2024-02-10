@@ -283,7 +283,7 @@ class mapping:
         self.Ny = self._data.shape[1]
         self.shape = self._data.shape
         
-    def go_crop_Auto(self,data=None,cropStartVx=40):
+    def go_crop_Auto(self,data=None,cropStartVx=32):
         cropData=self._crop_Auto(data=data,cropStartVx=cropStartVx)
         self._data=cropData
         self.Nx = self._data.shape[0]
@@ -636,7 +636,7 @@ class mapping:
             elif image_type == "b0_avg":
                 image = np.mean(self._data[:,:,z,:], axis=-1)
                 fig = plt.figure()
-                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.6)
+                plt.imshow(image, cmap=cmap, vmax=np.max(image)*0.8)
                 
             elif image_type == "HA":
                 image = self.ha[:,:,z]
@@ -1469,12 +1469,12 @@ class mapping:
         
         '''
         if path ==None:
-            path=self.path
+            path=os.path.dirname(path)
         if ID== None:
             ID=self.ID
         if data is None:
             data=self._data
-        save_nii=os.path.join(os.path.dirname(path),f'{ID}_moco.nii.gz')
+        save_nii=os.path.join(path,f'{ID}.nii.gz')
         nib.save(nib.Nifti1Image(data,affine=np.eye(4)),save_nii)
         print('Saved successfully!')
 
@@ -1722,8 +1722,40 @@ class mapping:
         else:
             raise Exception('sorry only implemented Siemens grad table for now')
     
-    
-
+            
+            
+    #Happy New Year!!!! by DM 1/2/2024
+    ##This function is to compare with l
+    def bmode(self,data=None,ID=None,x=None,y=None,plot=False,path=None):
+        if path==None:
+            path=os.path.dirname(self.path)
+        if ID is None:
+            ID=self.ID
+        if data==None:
+            data=self.data
+        Nx,Ny,Nz,Nd=np.shape(data)
+        if x==None and y==None:
+            y=int(np.shape(data)[0]/2)
+        if x is not None:
+            A2=np.zeros((Ny,Nz,Nd),dtype=np.float64)
+            A2=data[x,:,:,:]
+        elif y is not None:
+            A2=np.zeros((Nx,Nz,Nd),dtype=np.float64)
+            A2=data[:,y,:,:]
+        if Nz !=1:
+            fig,axs=plt.subplots(1,Nz)
+            ax=axs.ravel()
+            for i in range(Nz):
+                ax[i].imshow(A2[...,i,:],cmap='gray')
+                ax[i].set_title(f'z={i}')
+                #ax[i].axis('off')
+        elif Nz==1:
+            A3=np.squeeze(A2)
+            plt.imshow(A3,cmap='gray')
+            #plt.axis('off')
+        if plot==True:
+            dir=os.path.join(path,ID)
+            plt.savefig(dir)
 
 #########################################################################################
 # Helper functions -- NOT a class function accessible by the object
@@ -2023,31 +2055,6 @@ def moco_naive(data,obj,valueList=None,target_ind=0,plot=False):
     return data_return
 
 
-#Happy New Year!!!! by DM 1/2/2024
-def bmode(data,dir,x=None,y=None):
-    if dir==None:
-        dir='b_mode'
-    Nx,Ny,Nz,Nd=np.shape(data)
-    if x==None and y==None:
-        y=int(np.shape(data)[0]/2)
-    if x is not None:
-        A2=np.zeros((Ny,Nz,Nd),dtype=np.float64)
-        A2=data[x,:,:,:]
-    elif y is not None:
-        A2=np.zeros((Nx,Nz,Nd),dtype=np.float64)
-        A2=data[:,y,:,:]
-    if Nz !=1:
-        fig,axs=plt.subplots(1,Nz)
-        ax=axs.ravel()
-        for i in range(Nz):
-            ax[i].imshow(A2[...,i,:],cmap='gray')
-            ax[i].set_title(f'z={i}')
-            #ax[i].axis('off')
-    elif Nz==1:
-        A3=np.squeeze(A2)
-        plt.imshow(A3,cmap='gray')
-        #plt.axis('off')
-    plt.savefig(dir)
 
 
 

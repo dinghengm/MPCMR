@@ -1,7 +1,12 @@
+#########################
+#########This is the script to read the clinical data from subject with LGE
+#########FROM saved_ims_v2_Dec_14_2023
+#########TO  saved_ims_v2_Dec_14_2023,CIRC_ID
+#########TO STATS: mapping_Dec
+#########SUBJECTS 438 and 488
+#########MAPSAVEDAS overlay images
+
 # %% ####################################################################################
-# Import libraries ######################################################################
-#########################################################################################
-# all you need is below (must have the matplotlib qt for GUI like crop or lv segmentation)
 %matplotlib inline
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
 from libMapping_v13 import readFolder,decompose_LRT,moco,moco_naive
@@ -24,7 +29,8 @@ matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023')
 #%%
-CIRC_ID='CIRC_00438'
+CIRC_ID='CIRC_00488'
+#CIRC_ID='CIRC_00438'
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
@@ -34,13 +40,14 @@ data_path=os.path.dirname(dicomPath)
 from imgbasics import imcrop
 from skimage.transform import resize as imresize
 #%%
-T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_HHR_MOCO_T1'))
+T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_saxs_MOCO_T1'))
 
-T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
+#T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
+T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_saxs_MOCO_T1'))
 
-T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_MOCO_T2-2'))
+T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_saxs_MOCO_T2'))
 
-lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX moco FS_MOCO_AVG_MAG-2'))
+lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX moco FS_b2_MOCO_AVG_MAG'))
 
 #%%  Read T1
 %matplotlib qt
@@ -50,7 +57,7 @@ map_T1=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI',CIRC_ID=CIRC_ID)
 
 map_T1._update()
 map_T1.go_crop()
-map_T1.go_resize(scale=2)
+#map_T1.go_resize(scale=2)
 map_T1._update()
 cropzone=map_T1.cropzone
 #%%
@@ -77,7 +84,7 @@ map_T1_post=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI_post',CIRC_ID
 map_T1_post.cropzone=cropzone
 map_T1_post.shape=np.shape(map_T1_post._data)
 map_T1_post.go_crop()
-map_T1_post.go_resize(scale=2)
+#map_T1_post.go_resize(scale=2)
 map_T1_post.shape=np.shape(map_T1_post._data)
 #%%
 %matplotlib qt
@@ -88,7 +95,7 @@ data_crop = np.zeros(shape)
 for z in tqdm(range(map_T1_post.Nz)):
     data_crop[:,:,z]=imcrop(data[:,:,z], cropzone)
 data_crop=imresize(data_crop,np.shape(map_T1_post._data))
-crange=[0,1600]
+crange=[0,1000]
 map_T1_post.crange=crange
 map_T1_post._map=data_crop.squeeze()
 map_T1_post.cropzone=cropzone
@@ -100,11 +107,14 @@ map_T1_post.show_calc_stats_LV()
 #%% Read T2
 data=T2_bssfp.squeeze()
 map_T2=mapping(data=np.expand_dims(data,axis=-1),ID='T2_FLASH',CIRC_ID=CIRC_ID)
-map_T2.cropzone=cropzone
+#map_T2.cropzone=cropzone
 map_T2.shape=np.shape(map_T2._data)
 map_T2.go_crop()
-map_T2.go_resize(scale=2)
-map_T2.shape=np.shape(map_T2._data)
+#map_T2.go_resize(scale=2)
+#map_T1.go_resize(scale=2)
+map_T2._update()
+cropzone=map_T2.cropzone
+
 
 #%%
 %matplotlib qt
@@ -151,7 +161,7 @@ for map in [map_T1,map_T1_post,map_T2]:
     #Save again
     map.save()
     print('Saved the segmentation sucessfully')
-    map.imshow_overlay(path=img_save_dir,ID=f'{map.ID}_overlay')
+    map.imshow_overlay(path=img_save_dir,ID=f'{map.ID}_overlay',plot=plot)
 
 # %%
 # %%
@@ -163,18 +173,20 @@ map_lge=mapping(data=np.expand_dims(data,axis=-1),ID='LGE_SA',CIRC_ID=CIRC_ID)
 
 map_lge._update()
 map_lge.go_crop()
-map_lge.go_resize(scale=2)
+#map_lge.go_resize(scale=2)
 map_lge._update()
-
+#%%
 num_average = map_lge.Nz
 map_lge._data=map_lge._data.squeeze()
 figsize = (3.4*num_average, 3)
+vmin=np.min(map_lge._data)
+vmax=np.max(map_lge._data)*0.3
 fig, axes = plt.subplots(nrows=1, ncols=num_average, figsize=figsize, constrained_layout=True)
 for sl in range(num_average):
     axes[sl].set_axis_off()
-    im = axes[sl].imshow(map_lge._data[..., sl],  cmap='gray')
-
-plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}"))
+    im = axes[sl].imshow(map_lge._data[..., sl],  cmap='gray',vmin=vmin,vmax=vmax)
+if plot:
+    plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_2"))
 plt.show()
 
 # %%

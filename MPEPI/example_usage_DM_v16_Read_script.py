@@ -1,3 +1,16 @@
+#########################
+#########This is the script to generate the maps in batch (5 mins per subject)
+#########FROM saved_ims
+#########TO   saved_ims_v2_Jan_12_2024
+#########SUBJECTS ['452','457','471','472','486','498','500']
+#########MAPSAVEDAS m.mapping
+
+
+
+
+
+
+
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
 from libMapping_v13 import readFolder,decompose_LRT,moco,moco_naive
 import numpy as np

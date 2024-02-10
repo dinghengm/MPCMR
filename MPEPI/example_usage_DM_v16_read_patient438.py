@@ -30,7 +30,7 @@ else:
 #%%
 # %%
 #Please try to change to CIRC_ID
-CIRC_ID='CIRC_00488'
+CIRC_ID='CIRC_00438'
 img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)

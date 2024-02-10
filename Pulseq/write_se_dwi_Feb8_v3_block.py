@@ -25,7 +25,7 @@ def bFactCalc(g,delta,DELTA):
 #%%
 #This version implement bandwidth to match with epi
 plot=bool
-write_seq=False
+write_seq=bool
 
 # ======
 # SETUP
@@ -76,7 +76,7 @@ kx_width = Nx * delta_kx
 ky_width = Ny * delta_ky
 
 #WD=130*Nx
-#readout_time= 1/WD * Nx   #TODO #Might be able to change to match bandwidth
+#readout_time= 1/ (WD * Nx)   #TODO #Might be able to change to match bandwidth
 readout_time=2.5*3.2e-4 
 #print(readout_time)
 '''
@@ -117,17 +117,25 @@ dur = math.ceil(2 * math.sqrt(delta_kx / system.max_slew) / 10e-6) * 10e-6
 #gy = pp.make_trapezoid(channel="y", system=system, area=delta_ky, duration=dur)
 
 #`Refocusing pulse with spoiling gradients
-rf180,gz180,_ = pp.make_sinc_pulse(
+'''rf180,gz180,_ = pp.make_sinc_pulse(
     flip_angle=np.pi, system=system, duration=3e-3,slice_thickness=slice_thickness,
     apodization=0.5,
     time_bw_product=4,
-    phase_offset=np.pi/2,
     use="refocusing",
     return_gz=True,
 )
+#Change this to 8 times
 gz_spoil = pp.make_trapezoid(
-    channel="z", system=system, area=gz.area * 3, duration=3 * pre_time
+    channel="z", system=system, area=gz.area * 8, duration=3 * pre_time
+)'''
+rf180 = pp.make_block_pulse(
+    flip_angle=np.pi, system=system, duration=3e-3, use="refocusing"
 )
+gz_spoil = pp.make_trapezoid(
+    channel="z", system=system, area=gz.area * 2, duration=3 * pre_time
+)
+
+
 
 # Calculate delay time
 duration_to_center = 1/2 *pp.calc_duration(gx)
@@ -165,8 +173,8 @@ assert(delay_TE2>=0)
 % to shorten delayTE2 by gmax/max_sr to accommodate the ramp down
 '''
 
-small_delta=delay_TE1-2*math.ceil(system.max_grad/system.max_slew/system.grad_raster_time)*system.grad_raster_time
-big_delta=delay_TE1+pp.calc_duration(rf180,gz180,gz_spoil)
+small_delta=delay_TE1-math.ceil(system.max_grad/system.max_slew/system.grad_raster_time)*system.grad_raster_time
+big_delta=delay_TE1+pp.calc_duration(rf180,gz_spoil)
 #we define bFactCalc function below to eventually calculate time-optimal
 #gradients. for now we just abuse it with g=1 to give us the coefficient
 #b50
@@ -196,32 +204,33 @@ assert(pp.calc_duration(gDiff_500_x)<=delay_TE2)
 
 outputSring=['50_x','50_y','50_z','500_x','500_y','500_z']
 #for ind,gDiff in enumerate([gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]):
-seq_filename=f"se_dwi_pypulseq_TE35_FOV432_172_160_64_500z_Jan21.seq"
+seq_filename=f"se_dwi_pypulseq_TE35_FOV432_172_160_64_500z_Feb_8_testblock.seq"
 
 gDiff=gDiff_500_z
 
-for i in range(Ny):
+for ii in range(-Ny // 2, Ny // 2):
+    gy_pre = pp.make_trapezoid(
+channel="y", system=system, area=-ii * delta_ky, duration=pre_time
+) 
     seq.add_block(rf, gz)
     seq.add_block(gx_pre, gy_pre, gz_reph)
     seq.add_block(pp.make_delay(delay_TE1),gDiff)
     #Might not need gz_spoil if it has gDiff? 
     seq.add_block(gz_spoil)
-    seq.add_block(rf180,gz180)
+    seq.add_block(rf180)
     seq.add_block(gz_spoil)
     seq.add_block(pp.make_delay(delay_TE2),gDiff)
     seq.add_block(gx, adc)  # Read one line of k-space
     #seq.add_block(gy)  # Phase blip
     #change the gy_pre area to one line smaller, which starts from positive max line
-    gy_pre = pp.make_trapezoid(
-channel="y", system=system, area=((Ny / 2)-(i+1)) * delta_ky, duration=pre_time
-)         
+         
     
     #gx.amplitude = -gx.amplitude  # Reverse polarity of read gradient no need for se
     #seq.add_block(pp.make_delay(delayTR))
     #To simplify the sequence. hard code TR time
     seq.add_block(pp.make_delay(TR))
 
-
+seq.set_definition('FOV', [fovx, fovy, slice_thickness])
 ok, error_report = seq.check_timing()
 if ok:
     print("Timing check passed successfully")
@@ -269,7 +278,7 @@ for gDiff in [gDiff_500_x,gDiff_500_y,gDiff_500_z]:
         seq.add_block(pp.make_delay(delay_TE1),gDiff)
         #Might not need gz_spoil if it has gDiff? 
         seq.add_block(gz_spoil)
-        seq.add_block(rf180,gz180)
+        seq.add_block(rf180)
         seq.add_block(gz_spoil)
         seq.add_block(pp.make_delay(delay_TE2),gDiff)
         seq.add_block(gx, adc)  # Read one line of k-space

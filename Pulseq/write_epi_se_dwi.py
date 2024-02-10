@@ -25,7 +25,7 @@ def bFactCalc(g,delta,DELTA):
 
 #%%
 plot=True
-write_seq=True
+write_seq=False
 seq_filename = "epi_se_pypulseq.seq"
 
 # ======
@@ -165,10 +165,12 @@ else:
 # VISUALIZATION
 # ======
 if plot:
-    seq.plot()
+    seq.plot((time_range=(0,0.1)))
 
 # =========
 # WRITE .SEQ
 # =========
 if write_seq:
     seq.write(seq_filename)
+
+# %%
