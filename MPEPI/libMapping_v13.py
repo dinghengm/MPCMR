@@ -1134,7 +1134,66 @@ class mapping:
                 self.mask_lateral[..., z] = multirois.rois['lateral'].get_mask(image)
 
 
+    def go_segment_LV_moco(
+        self,
+        z=-1,
+        d=-1,
+        reject=None,
+        image_type="b0",
+        roi_names=['endo', 'epi'],
+        brightness=0.7,
+        crange=None):
+        '''
+        Segment the LV for moco test
+        
+        Input:
+            * z: slices to segment, -1 (default) to segment all
+            * reject: slices to reject (will not have to segment, will not contribute to stats)
+            * image_type: 
+                    - "b0": first b0 image
+            * roi names: rois to generate, default ['endo', 'epi'], but may want ['endo', 'epi', 'septal', 'lateral']
+'''
+        # you will need to use this decorator to make this work --> %matplotlib qt
+        print('Segment of the LV')
+        data=self._data
+        if crange is None:
+            crange=[np.min(data),np.max(data)*brightness]
+        if d==-1:##All Nd
+            constrast=range(self.Nd)
+            if reject != None:
+                slices = np.delete(constrast, reject)
+        if z == -1: #new ROI
+            self.mask_endo = np.full((data).shape, False, dtype=bool) # [None]*self.Nz
+            self.mask_epi = np.full((data).shape, False, dtype=bool) #[None]*self.Nz
+            self.mask_lv = np.full((data).shape, False, dtype=bool) #[None]*self.Nz
+            slices = range(self.Nz)
+            
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+        for d in constrast:
+            for z in slices:
 
+                if image_type == "b0":
+                    image = self._data[:,:,z,d] #np.random.randint(0,255,(255,255))
+                    fig = plt.figure()
+                    plt.imshow(image, cmap='gray', vmax=np.max(image)*brightness,vmin=np.min(image))
+                # draw ROIs
+                plt.title('Slice '+ str(d))
+                fig.canvas.manager.set_window_title('Slice '+ str(d))
+                multirois = MultiRoi(fig=fig, roi_names=roi_names)
+                
+                if np.any(np.array(roi_names) == "endo"):
+                    self.mask_endo[..., z,d] = multirois.rois['endo'].get_mask(image)
+                
+                if np.any(np.array(roi_names) == "epi"):
+                    self.mask_epi[..., z,d] = multirois.rois['epi'].get_mask(image)
+                
+                self.mask_lv[..., z,d] = self.mask_epi[..., z,d]^self.mask_endo[..., z,d]
+                self.roi=multirois
+    
 
     def imshow_map(self,volume=None,crange=None,cmap='gray',ID=None,path=None,plot=False):
         try:

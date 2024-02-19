@@ -27,9 +27,9 @@ plt.rcParams.update({'axes.titlesize': 'small'})
 import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
-img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023')
+img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024')
 #%%
-CIRC_ID='CIRC_00488'
+CIRC_ID='CIRC_00438'
 #CIRC_ID='CIRC_00438'
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 if not os.path.exists(img_save_dir):
@@ -40,14 +40,18 @@ data_path=os.path.dirname(dicomPath)
 from imgbasics import imcrop
 from skimage.transform import resize as imresize
 #%%
-T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_saxs_MOCO_T1'))
+#T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_saxs_MOCO_T1'))
+T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_HHR_MOCO_T1'))
 
-#T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
-T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_saxs_MOCO_T1'))
+T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
+#T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_saxs_MOCO_T1'))
 
-T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_saxs_MOCO_T2'))
+#T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_saxs_MOCO_T2'))
+T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_MOCO_T2-2'))
 
-lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX moco FS_b2_MOCO_AVG_MAG'))
+
+lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX moco FS_MOCO_AVG_MAG'))
+#lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX moco FS_b2_MOCO_AVG_MAG'))
 
 #%%  Read T1
 %matplotlib qt
@@ -107,7 +111,7 @@ map_T1_post.show_calc_stats_LV()
 #%% Read T2
 data=T2_bssfp.squeeze()
 map_T2=mapping(data=np.expand_dims(data,axis=-1),ID='T2_FLASH',CIRC_ID=CIRC_ID)
-#map_T2.cropzone=cropzone
+map_T2.cropzone=cropzone
 map_T2.shape=np.shape(map_T2._data)
 map_T2.go_crop()
 #map_T2.go_resize(scale=2)
@@ -170,23 +174,27 @@ for map in [map_T1,map_T1_post,map_T2]:
 
 data=lge_post.squeeze()
 map_lge=mapping(data=np.expand_dims(data,axis=-1),ID='LGE_SA',CIRC_ID=CIRC_ID)
-
 map_lge._update()
 map_lge.go_crop()
 #map_lge.go_resize(scale=2)
 map_lge._update()
 #%%
-num_average = map_lge.Nz
+#slices= range(map_lge.Nz)
+slices=[5,7,9]
+num_average=len(slices)
 map_lge._data=map_lge._data.squeeze()
 figsize = (3.4*num_average, 3)
 vmin=np.min(map_lge._data)
-vmax=np.max(map_lge._data)*0.3
+vmax=np.max(map_lge._data)
 fig, axes = plt.subplots(nrows=1, ncols=num_average, figsize=figsize, constrained_layout=True)
-for sl in range(num_average):
-    axes[sl].set_axis_off()
-    im = axes[sl].imshow(map_lge._data[..., sl],  cmap='gray',vmin=vmin,vmax=vmax)
+for ind,sl in enumerate(slices):
+    axes[ind].set_axis_off()
+    im = axes[ind].imshow(map_lge._data[..., sl],  cmap='gray',vmin=-400,vmax=vmax)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75, pad=0.018, aspect=18)
+
 if plot:
-    plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_2"))
+    plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_4"))
+    #plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_all"))
 plt.show()
 
 # %%

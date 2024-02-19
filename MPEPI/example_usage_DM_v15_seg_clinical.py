@@ -85,8 +85,9 @@ def testing_reseg(obj):
     obj.save(filename=os.path.join(img_root_dir,f'{obj.CIRC_ID}_{obj.ID}_p.mapping')) 
 
 #%%
-CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
-CIRC_NUMBER=CIRC_ID_List[3]
+#CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
+CIRC_ID_List=[446,452,429,419,405,398,382,381,373,457,472,486,498,500]
+CIRC_NUMBER=CIRC_ID_List[-5]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
@@ -96,13 +97,13 @@ if not os.path.exists(img_save_dir):
 #%%
 dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 data_path=os.path.dirname(dicomPath)
-T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_3slice_8mm_150_gap_MOCO_T1'))
+T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_3slice_8mm_150_gap_MOCO_T1-2'))
 
 T1_bssfp_fb,_,_=readFolder(os.path.join(data_path,r'MR t1map_long_t1_3slice_8mm_150_gap_free_breathing_MOCO_T1'))
 
-T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_MOCO_T2'))
+T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_MOCO_T2-2'))
 
-T2_bssfp_fb,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_free_breathing_MOCO_T2-2'))
+T2_bssfp_fb,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_free_breathing_MOCO_T2'))
 
 
 #%%
@@ -127,6 +128,11 @@ cropzone=map.cropzone
 
 #data=T1_bssfp_fb.squeeze()
 #map=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI_FB',CIRC_ID=CIRC_ID)
+#map.shape=np.shape(map._data)
+#map.go_crop()
+
+#map.shape=np.shape(map._data)
+#cropzone=map.cropzone
 
 #data=T1_bssfp.squeeze()
 #map=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI',CIRC_ID=CIRC_ID)
@@ -201,6 +207,7 @@ for sl in range(num_slice):
 cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75, pad=0.018, aspect=18)
 plt.savefig(os.path.join(img_save_dir, f"{map.ID}"))
 plt.show()
+
 
 map.show_calc_stats_LV()
 map.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Dec.csv',crange=crange)

@@ -26,7 +26,7 @@ def bFactCalc(g,delta,DELTA):
 
 plot=bool
 write_seq=True
-seq_filename="se_dwi_pypulseq_TE65_FOV172_Nx64_y.seq"
+seq_filename="se_dwi_pypulseq_TE65_FOV172_Nx64_x.seq"
 
 # ======
 # SETUP
@@ -189,7 +189,7 @@ delayTR= math.ceil( (TR-pp.calc_duration(gz)  -pp.calc_duration(gx)/2 -TE +gz.fa
 # ======
 # Define sequence blocks
 #for gDiff in [gDiff_50_x,gDiff_50_y,gDiff_50_z,gDiff_500_x,gDiff_500_y,gDiff_500_z]:
-for gDiff in [gDiff_50_y,gDiff_500_y]:
+for gDiff in [gDiff_50_x,gDiff_500_x]:
 
     for i in range(Ny):
         seq.add_block(rf, gz)

@@ -288,6 +288,11 @@ class segmentation:
             constrast=range(self.Nd)
             if reject != None:
                 slices = np.delete(constrast, reject)
+            else:
+                if type(z) == int:
+                    constrast = [z]
+                else:
+                    constrast = np.copy(d)
         if z == -1: #new ROI
             self.mask_endo = np.full((data).shape, False, dtype=bool) # [None]*self.Nz
             self.mask_epi = np.full((data).shape, False, dtype=bool) #[None]*self.Nz

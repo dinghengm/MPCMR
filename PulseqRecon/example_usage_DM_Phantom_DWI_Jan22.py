@@ -28,8 +28,8 @@ plot=True
 # %%
 ########################Phantom Run1
 #CIRC_ID='CIRC_Phantom_Aug9'
-CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
-dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_1')
+CIRC_ID='CIRC_PHANTOM_FEB12 CIRC_PHANTOM_FEB12'
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MR ep2d_MP03_DWI_Z_FINAL1')
 #dirpath=os.path.dirname(dicomPath)
 #dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
 MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
@@ -43,7 +43,7 @@ from skimage import measure
 gray=cv.normalize(image,None,0,255,cv.NORM_MINMAX)
 blurred = cv.GaussianBlur(gray, (3, 3), 0)
 blurred=np.uint8(blurred)
-edged = cv.Canny(blurred, 1, 100)
+edged = cv.Canny(blurred, 40, 200)
 #cv.imshow("Original image", image)
 plt.imshow(edged)
 #%%
@@ -61,25 +61,25 @@ for contour in contours:
 #%%
 
 MP03_M2.go_cal_ADC()
-MP03_M2.imshow_map(plot=plot)
+MP03_M2.imshow_map(plot=plot,crange=[0,2],cmap='hot')
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
 
 #%%
-dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M0_1')
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MR ep2d_MP03_DWI_Z_FINAL2')
 #dirpath=os.path.dirname(dicomPath)
 #dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
 MP03_M0=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+%matplotlib qt
 MP03_M0.imshow_corrected(valueList=range(1000),plot=plot)
 #%%
 MP03_M0.go_cal_ADC()
-MP03_M0.imshow_map(plot=plot)
+MP03_M0.imshow_map(plot=plot,crange=[0,2],cmap='hot')
 
 #%%
 ##########################Phantom2####################################
 
 #CIRC_ID='CIRC_Phantom_Aug9'
-CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
-dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_2')
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MR ep2d_MP03_DWI_Z_FINAL3')
 #dirpath=os.path.dirname(dicomPath)
 #dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
 MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
@@ -88,25 +88,15 @@ MP03_M2.imshow_corrected(valueList=range(1000),plot=plot)
 #%%
 
 MP03_M2.go_cal_ADC()
-MP03_M2.imshow_map(plot=plot)
+MP03_M2.imshow_map(plot=plot,crange=[0,2],cmap='hot')
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
 
-#%%
-dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M0_2')
-#dirpath=os.path.dirname(dicomPath)
-#dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
-MP03_M0=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
-MP03_M0.imshow_corrected(valueList=range(1000),plot=plot)
-#%%
-MP03_M0.go_cal_ADC()
-MP03_M0.imshow_map(plot=plot)
 
 #%%
 ##########################Phantom3####################################
 
 #CIRC_ID='CIRC_Phantom_Aug9'
-CIRC_ID='CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final'
-dicomPath=os.path.join(defaultPath,CIRC_ID,f'MP03_M2_3')
+dicomPath=os.path.join(defaultPath,CIRC_ID,f'MR ep2d_MP03_DWI_Z_FINAL1_1ave')
 #dirpath=os.path.dirname(dicomPath)
 #dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Jan22_Final CIRC_Phantom_Jan22_Final\MP03_M2_4Run'
 MP03_M2=mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
@@ -115,7 +105,7 @@ MP03_M2.imshow_corrected(valueList=range(1000),plot=plot)
 #%%
 
 MP03_M2.go_cal_ADC()
-MP03_M2.imshow_map(plot=plot)
+MP03_M2.imshow_map(plot=plot,crange=[0,2],cmap='hot')
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
 
 #%%

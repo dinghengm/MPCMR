@@ -18,7 +18,7 @@ plt.rcParams['savefig.dpi'] = 500
 from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 #%%
-plot=True
+plot=False
 
 # %%
 
@@ -28,12 +28,13 @@ plot=True
 CIRC_ID='CIRC_Phantom_Aug_9th_Diff CIRC_Phantom_Aug_9th_Diff'
 #dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI\MR000000.dcm')
 #dirpath=os.path.dirname(dicomPath)
-dicomPath=fr'C:\Research\MRI\MP_EPI\Phangtom\CIRC_Phantom_Aug_9th_Diff CIRC_Phantom_Aug_9th_Diff\CIRC_DEVELOPMENT Matthew\MR ep2d_MP03_DTI_T1_T2_DIFF_5slice'
+dicomPath=fr'C:\Research\MRI\MP_EPI\Phantom\CIRC_Phantom_Aug_9th_Diff CIRC_Phantom_Aug_9th_Diff\CIRC_DEVELOPMENT Matthew\MR ep2d_MP03_DTI_T1_T2_DIFF_5slice'
 MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID)
 MP03.valueList=[]
 #MP03 = mapping(data=fr'{dicomPath}_p.mapping')
 # %%
 #Motion correction
+%matplotlib qt
 MP03.go_crop()
 MP03.go_resize(scale=2)
 #MP03.go_moco()
@@ -53,9 +54,22 @@ MP01_EPI.go_resize(scale=2)
 fig,axs=MP01_EPI.imshow_corrected(ID='MP01_T1_EPI_raw',plot=plot)
 
 #%%
+%matplotlib inline
 MP01_EPI.go_ir_fit()
 #%%
-MP01_EPI.imshow_map()
+%matplotlib qt
+plt.style.use('default')
+MP01_EPI.imshow_map(plot=True)
+#%%
+plt.style.use('default')
+plt.figure(constrained_layout=True)
+#MP01Map=MP01_SE._map
+MP01Map=MP01_EPI._map[:,:,2]
+#MP01Map=np.rot90(MP01Map)
+plt.imshow(MP01Map,cmap='magma',vmin=0,vmax=3000, aspect='auto')
+plt.axis('off')
+img_dir= os.path.join(dirpath,f'MP01_EPI_Slice2')
+plt.savefig(img_dir)
 
 #%%
 dicomPath=os.path.join(dirpath,f'MP01_T1_SE')
@@ -63,13 +77,23 @@ dicomPath=os.path.join(dirpath,f'MP01_T1_SE')
 print(f'Readding\n{dicomPath}\n')
 ID = os.path.dirname(dicomPath).split('\\')[-1]
 MP01_SE= mapping(data=dicomPath,reject=False,CIRC_ID=CIRC_ID,default=327,sigma=100)
+#MP01_SE.go_crop()
 MP01_SE.go_resize(scale=2)
 fig,axs=MP01_SE.imshow_corrected(ID='MP01_T1_SE_raw',plot=plot)
 #%%
-finalMap,finalRa,finalRb,finalRes=go_ir_fit(data=MP01_SE._data,TIlist=MP01_SE.valueList,searchtype='grid',invertPoint=0)
-plt.figure()
-plt.imshow(finalMap,cmap='magma',vmin=0,vmax=3000)
+MP01_SE.go_ir_fit()
+
+#%%
+#finalMap,finalRa,finalRb,finalRes=ir_fit(data=MP01_SE._data,TIlist=MP01_SE.valueList,searchtype='grid',invertPoint=0)
+plt.figure(constrained_layout=True)
+plt.style.use('default')
+#MP01Map=MP01_SE._map
+
+#MP01Map=np.flip(MP01Map,axis=0)
+#MP01Map=np.rot90(MP01Map)
+plt.imshow(MP01_SE._map.squeeze(),cmap='magma',vmin=0,vmax=3000, aspect='auto')
 img_dir= os.path.join(dirpath,f'MP01_SE')
+plt.axis('off')
 plt.savefig(img_dir)
 
 #%%
@@ -78,24 +102,35 @@ dicomPath=os.path.join(dirpath,f'MP02_T2_EPI')
 ID = dicomPath.split('\\')[-1]
 data,valueList,_=readFolder(dicomPath,sortBy='tval')
 MP02_EPI = mapping(data=data,CIRC_ID=CIRC_ID,ID=ID,valueList=valueList)
-MP02_EPI.cropzone=cropzone
+#MP02_EPI.cropzone=cropzone
 MP02_EPI.path=dicomPath
 MP02_EPI.valueList=[30,50,80,150]
 fig,axs=MP02_EPI.imshow_corrected(ID='MP02_T1_EPI_raw',plot=plot)
 
 # %%
 MP02_EPI.cropzone=cropzone
-MP02_EPI.go_crop()
+#MP02_EPI.go_crop()
 MP02_EPI.go_resize(scale=2)
 #MP02.go_moco()
 MP02_EPI.imshow_corrected(ID='MP02_EPI_raw',plot=True)
 # %%
-plt.style.use('classic')
+plt.style.use('default')
 MP02_EPI.go_t2_fit()
-MP02_EPI.imshow_map()
+MP02_EPI.imshow_map(plot=True)
 #%%
 
-dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP03_DWI')
+plt.figure(constrained_layout=True)
+#MP01Map=MP01_SE._map
+MP02Map=MP02_EPI._map[:,:,2]
+
+#MP01Map=np.rot90(MP01Map)
+plt.imshow(MP02Map.squeeze(),cmap='viridis',vmin=0,vmax=120)
+plt.axis('off')
+img_dir= os.path.join(dirpath,f'MP02_EPI_Slice2')
+plt.savefig(img_dir)
+
+#%%
+dicomPath=os.path.join(defaultPath,f'20230809_1449_CIRC_Phantom_Aug_9th_Diff_\MP02_T2_SE')
 dirpath=os.path.dirname(dicomPath)
 dicomPath=os.path.join(dirpath,f'MP02_T2_SE')
 ID = dicomPath.split('\\')[-1]
@@ -106,6 +141,22 @@ MP02_SE.path=dicomPath
 MP02_SE.valueList=[50,80,100,150]
 #MP02.go_moco()
 MP02_SE.imshow_corrected(ID='MP02_SE_raw',plot=True)
+
+#%%
+plt.style.use('default')
+MP02_SE.go_t2_fit()
+
+
+#%%
+plt.figure(constrained_layout=True)
+plt.style.use('default')
+#MP01Map=MP01_SE._map
+#MP01Map=np.rot90(MP01Map)
+plt.imshow(MP02_SE._map.squeeze(),cmap='viridis',vmin=0,vmax=120)
+img_dir= os.path.join(dirpath,f'MP02_SE')
+plt.axis('off')
+plt.savefig(img_dir)
+
 # %%
 
 MP02_SE._save_nib()

@@ -21,8 +21,9 @@ img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Dec_14_2023')
 
 
 #%%
-CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
-CIRC_NUMBER=CIRC_ID_List[0]
+#CIRC_ID_List=['446','452','429','419','405','398','382','381','373']
+CIRC_ID_List=[446,452,429,419,405,398,382,381,373,457,472,486,498,500]
+CIRC_NUMBER=CIRC_ID_List[-1]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 global img_save_dir
@@ -159,7 +160,7 @@ for obj in [T2,T2_FB]:
     num_slice = obj.Nz 
     figsize = (3.4*num_slice, 3)
 
-    # T1
+
     fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
     crange=obj.crange
     cmap=obj.cmap
