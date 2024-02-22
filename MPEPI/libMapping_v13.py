@@ -1953,7 +1953,6 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     elif minInd==len(TIlist):
         minInd=len(TIlist)-1'''
     #Invert the data to 2x*before,at, 2x*after the min
-    invertPoint=None
     if invertPoint==None:
         iterNum=0,2
     else:

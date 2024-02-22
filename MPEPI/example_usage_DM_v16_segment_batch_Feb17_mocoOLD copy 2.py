@@ -32,7 +32,7 @@ plot=True
 #%%
 CIRC_ID_List=[446,429,419,405,398,382,381,373,457,472,486,498,500]
 #CIRC_NUMBER=CIRC_ID_List[9]
-CIRC_NUMBER=CIRC_ID_List[1]
+CIRC_NUMBER=CIRC_ID_List[5]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024','NULL',f'{CIRC_ID}')
@@ -74,6 +74,7 @@ data0MP02_raw=MP02._raw_data[:,:,ss,:]
 data0MP03_raw=MP03._raw_data[:,:,ss,:]
 
 dataSlice0=np.concatenate((map01._data,data0MP02[:,:,np.newaxis,:],data0MP03[:,:,np.newaxis,:]),axis=-1)
+
 dataSlice0_raw=np.concatenate((map01._raw_data,data0MP02_raw[:,:,np.newaxis,:],data0MP03_raw[:,:,np.newaxis,:]),axis=-1)
 #dataSlice1_raw=np.concatenate((MP01_1._raw_data,MP02._raw_data[:,:,1,:],MP03._raw_data[:,:,1,:]))
 #dataSlice2_raw=np.concatenate((MP01_2._raw_data,MP02._raw_data[:,:,2,:],MP03._raw_data[:,:,2,:]))

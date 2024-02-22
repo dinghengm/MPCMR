@@ -27,9 +27,9 @@ plt.rcParams.update({'axes.titlesize': 'small'})
 import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
-img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024')
+img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
 #%%
-CIRC_ID='CIRC_00438'
+CIRC_ID='CIRC_00435'
 #CIRC_ID='CIRC_00438'
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 if not os.path.exists(img_save_dir):
@@ -41,10 +41,10 @@ from imgbasics import imcrop
 from skimage.transform import resize as imresize
 #%%
 #T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_saxs_MOCO_T1'))
-T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_HHR_MOCO_T1'))
+T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_MOCO_T1'))
 
-T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
-#T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_saxs_MOCO_T1'))
+#T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4'))
+T1_bssfp_post,_,_=readFolder(os.path.join(data_path,r'MR t1map_short_t1_HHR_MOCO_T1-4_Post'))
 
 #T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_saxs_MOCO_T2'))
 T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_MOCO_T2-2'))
@@ -57,7 +57,7 @@ lge_post,_,_=readFolder(os.path.join(data_path,r'MR de_trufi_overview_psir SAX m
 %matplotlib qt
 
 data=T1_bssfp.squeeze()
-map_T1=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI',CIRC_ID=CIRC_ID)
+map_T1=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI_Long',CIRC_ID=CIRC_ID)
 
 map_T1._update()
 map_T1.go_crop()
@@ -80,7 +80,7 @@ map_T1.cropzone=cropzone
 print(map_T1.shape)
 map_T1.path=dicomPath
 map_T1.cmap="magma"
-map_T1.go_segment_LV(image_type='map',crange=crange,cmap="magma")
+map_T1.go_segment_LV(image_type='map',crange=crange,cmap="magma",roi_names=['endo', 'epi','septal','lateral'])
 map_T1.show_calc_stats_LV()
 #%%  Read T1 post
 data=T1_bssfp_post.squeeze()
@@ -141,6 +141,13 @@ map_T2.cmap="viridis"
 map_T2.go_segment_LV(image_type='map',crange=crange,cmap="viridis")
 map_T2.show_calc_stats_LV()
 
+
+#%%
+
+
+
+
+
 # %%
 %matplotlib inline
 for map in [map_T1,map_T1_post,map_T2]:
@@ -179,8 +186,25 @@ map_lge.go_crop()
 #map_lge.go_resize(scale=2)
 map_lge._update()
 #%%
+slices= range(map_lge.Nz)
+
+num_average=len(slices)
+map_lge._data=map_lge._data.squeeze()
+figsize = (3.4*num_average, 3)
+vmin=np.min(map_lge._data)
+vmax=np.max(map_lge._data)
+fig, axes = plt.subplots(nrows=1, ncols=num_average, figsize=figsize, constrained_layout=True)
+for ind,sl in enumerate(slices):
+    axes[ind].set_axis_off()
+    im = axes[ind].imshow(map_lge._data[..., sl],  cmap='gray',vmin=-400,vmax=vmax)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75, pad=0.018, aspect=18)
+
+if plot:
+    plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_all"))
+plt.show()
+#%%
 #slices= range(map_lge.Nz)
-slices=[5,7,9]
+slices=[4,8,11]
 num_average=len(slices)
 map_lge._data=map_lge._data.squeeze()
 figsize = (3.4*num_average, 3)

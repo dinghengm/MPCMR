@@ -7,16 +7,11 @@ from libMapping_v13 import *  # <--- this is all you need to do diffusion proces
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import SimpleITK as sitk # conda pip install SimpleITK-SimpleElastix
 import h5py
-import scipy.io as sio
-from tqdm.auto import tqdm # progress bar
-from imgbasics import imcrop
-from skimage.transform import resize as imresize
+import pandas as pd
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
-from t1_fitter import T1_fitter,go_fit_T1
 plt.rcParams.update({'axes.titlesize': 'small'})
 import matplotlib
 matplotlib.rcParams['savefig.dpi'] = 400
@@ -446,6 +441,7 @@ plt.savefig(os.path.join(img_save_dir,f'{MP01.CIRC_ID}_moco_first'))
 %matplotlib inline
 plt.style.use('default')
 testing_reseg(MP01,MP03,MP02,MP03)
+
 
 # %% View Maps Overlay
 

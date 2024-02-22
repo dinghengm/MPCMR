@@ -12,12 +12,12 @@ import scipy.io
 plt.close()
 
 #Ref
-DWI_Ref_ave_unsort=np.array([1.41,1.34,1.33,1.29,1.20,1.01,0.99])
+DWI_Ref_ave_unsort=np.array([1.11,1.04,1.03,0.99,0.90,0.71,0.69])
 DWI_Ref_std_unsort=np.array([0.01,0.02,0.01,0.01,0.03,0.02,0.05])
 
 #1
 
-DWI_ave_unsort=np.array([1.41,1.34,1.33,1.29,1.19,1.01,0.98])
+DWI_ave_unsort=np.array([1.11,1.04,1.03,0.99,0.89,0.71,0.68])
 DWI_std_unsort=np.array([0.01,0.02,0.01,0.01,0.03,0.02,0.05])
 
 #DWI_ave_unsort=np.array([1.43,1.36,1.36,1.31,1.21,1.03,0.98])
@@ -51,17 +51,17 @@ model=model.fit(X, DWI_ave)
 r_sq = model.score(X, DWI_ave)
 a=model.coef_[0]
 b=model.intercept_
-x=np.arange(0.9,DWI_Ref_ave[-1]+0.2,0.01)
+x=np.arange(0.6,DWI_Ref_ave[-1]+0.1,0.01)
 y=a*x + b
 plt.plot(x,y,linestyle='dashed',label='MP-EPI')
-plt.text(1.3,1,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}')
+plt.text(0.95,0.7,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}',fontsize=14)
 plt.errorbar(DWI_Ref_ave,DWI_ave,DWI_std, ls='none',ecolor='blue',color='blue',fmt='.', markersize='10',capsize=4, elinewidth=2)
 plt.plot(x,x,linestyle='solid',label='Reference')
 #plt.xlim(0.9,1.6)
-#plt.ylim(0.9,1.6)
-plt.xlabel('Reference ADC (ms)')
-plt.ylabel('MPEPI-ADC (ms)')
-plt.legend()
+#plt.ylim(0.9,1.6)""
+plt.xlabel('Reference ADC (µm2/ms)',fontsize=14)
+plt.ylabel('MP-EPI ADC (µm2/ms)',fontsize=14)
+plt.legend(fontsize=14)
 #plt.title('T1 Correlation Plot')
 
 
@@ -82,9 +82,8 @@ def bland_altman_plot(data1, data2, Print_title,*args, **kwargs):
     plt.axhline(md,           color='black', linestyle='-')
     plt.axhline(md + 1.96*sd, color='gray', linestyle='--')
     plt.axhline(md - 1.96*sd, color='gray', linestyle='--')
-    plt.title(f"{Print_title}")
-    plt.xlabel("Means")
-    plt.ylabel("Difference")
+    #plt.title(f"{Print_title}",fontsize=14)
+
     plt.ylim(md - 3.5*sd, md + 3.5*sd)
 
     xOutPlot = np.min(mean) + (np.max(mean)-np.min(mean))*1.14
@@ -110,15 +109,85 @@ def bland_altman_plot(data1, data2, Print_title,*args, **kwargs):
 
 plt.figure()
 md, sd, mean, CI_low, CI_high = bland_altman_plot(DWI_Ref_ave, DWI_ave,Print_title='Reference ADC, MP-EPI ADC')
-
+plt.xlabel("Mean (Reference ADC, MP-EPI ADC) [µm2/ms]",fontsize=14)
+plt.ylabel("ΔADC [µm2/ms]",fontsize=14)
 plt.show()
 #%%
-md, sd, mean, CI_low, CI_high = bland_altman_plot(T1_Molli_ave, T1_EPI_ave,Print_title='MOLLI T1, MP-EPI T1')
-plt.show()
-#%%
-md, sd, mean, CI_low, CI_high = bland_altman_plot(T1_SE_ave, T1_EPI_ave,Print_title='Reference T1, MP-EPI T1')
+T1_EPI_ave_unsort=np.array([459.45,1208.35,434.66,1628.16,1515.93,586.50,237.83,1001.67,290.43])
+T1_EPI_std_unsort=np.array([3.76,12.66,3.33,18.39,19.29,5.49,2.77,7.54,35.06])
 
+T1_Molli_ave_unsort=np.array([469,1106,426,1540,1354,565,257,955,297])
+# T1_Molli_ave=[426,1106,469,565,1354,1540,297,955,257]
+T1_Molli_std_unsort=np.array([7,6,7,8,7,6,4,10,5])
+
+T1_SE_ave_unsort=np.array([506.44,1254.85,444.61,1738,1582,598,181,1032,142])
+T1_SE_std_unsort=np.array([9,20,104,58,36,10,7,10,7])
+#Reorder it 
+arr1inds=T1_EPI_ave_unsort.argsort()
+T1_EPI_ave=T1_EPI_ave_unsort[arr1inds]
+T1_EPI_std=T1_EPI_std_unsort[arr1inds]
+arr2inds=T1_Molli_ave_unsort.argsort()
+T1_Molli_ave=T1_Molli_ave_unsort[arr2inds]
+T1_Molli_std=T1_Molli_std_unsort[arr2inds]
+arr2inds=T1_SE_ave_unsort.argsort()
+T1_SE_ave=T1_SE_ave_unsort[arr2inds]
+T1_SE_std=T1_SE_std_unsort[arr2inds]
+
+#%%
+plt.close()
+T2_EPI_ave_unsort=np.array([185,40,37,208,42,36,138,36,36])
+T2_EPI_std_unsort=np.array([2.7,1.4,1.1,3.3,0.5,0.7,0.9,0.6,0.8])
+# T2_SE_ave=[26,27,33,33,46,41]
+# T2_SE_std=[0.6,0.6,0.3,0.3,0.3,0.2]
+T2_Flash_ave_unsort=np.array([146,48,43,197,53,42,121,45,44])
+T2_Flash_std_unsort=np.array([3.2,0.9,0.6,7.8,0.8,0.6,3.5,0.6,0.4])
+T2_SE_ave_unsort=np.array([153.01,42.80,40.88,173.27,45.46,39.48,126.19,40.78,40.07])
+T2_SE_std_unsort=np.array([4.01,1.38,1.59,9.3,1.75,2.41,2.86,1.62,1.85])
+
+arr1inds=T2_EPI_ave_unsort.argsort()
+T2_EPI_ave=T2_EPI_ave_unsort[arr1inds]
+T2_EPI_std=T2_EPI_std_unsort[arr1inds]
+arr2inds=T2_Flash_ave_unsort.argsort()
+T2_Flash_ave=T2_Flash_ave_unsort[arr2inds]
+T2_Flash_std=T2_Flash_std_unsort[arr2inds]
+arr2inds=T2_SE_ave_unsort.argsort()
+T2_SE_ave=T2_SE_ave_unsort[arr2inds]
+T2_SE_std=T2_SE_std_unsort[arr2inds]
+
+#Plot the correlation plot
+%matplotlib inline
+plt.figure()
+from sklearn.linear_model import LinearRegression
+X=T1_SE_ave.reshape((-1, 1))
+
+model = LinearRegression()
+model=model.fit(X, T1_EPI_ave)
+#plt.errorbar(T1_SE_ave,T1_EPI_ave,T1_EPI_std,marker='*',label='EPI')
+r_sq = model.score(X, T1_EPI_ave)
+a=model.coef_[0]
+b=model.intercept_
+x=np.arange(0,T1_SE_ave[-1],3)
+y=a*x + b
+plt.plot(x,y,linestyle='dashed',label='MP-EPI')
+plt.text(1000,200,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}',fontsize=14)
+plt.errorbar(T1_SE_ave,T1_EPI_ave,T1_EPI_std, ls='none',ecolor='blue',color='blue',fmt='.', markersize='10',capsize=4, elinewidth=2)
+plt.plot(x,x,linestyle='solid',label='Reference')
+#plt.xlim=((-5,x[-1]+50))
+plt.xlabel('Reference T1 (ms)',fontsize=14)
+plt.ylabel('MP-EPI T1 (ms)',fontsize=14)
+plt.legend(fontsize=14)
+#plt.title('T1 Correlation Plot')
+
+
+# %%
+
+
+
+md, sd, mean, CI_low, CI_high = bland_altman_plot(T1_SE_ave, T1_EPI_ave,Print_title='Reference T1, MOLLI T1')
+plt.xlabel("Mean (Reference T1, MP-EPI T1) [ms]",fontsize=14)
+plt.ylabel("ΔT1 [ms]",fontsize=14)
 plt.show()
+
 
 #%%
 plt.figure()
@@ -134,190 +203,19 @@ b=model.intercept_
 x=np.arange(0,T2_SE_ave[-1],3)
 y=a*x + b
 plt.plot(x,y,linestyle='dashed',label='MP-EPI')
-plt.text(115,30,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}')
+plt.text(100,30,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}',fontsize=14)
 plt.errorbar(T2_SE_ave,T2_EPI_ave,T2_EPI_std, ls='none',ecolor='blue',color='blue',fmt='.', markersize='10',capsize=4, elinewidth=2)
 plt.plot(x,x,linestyle='solid',label='Reference')
-plt.xlim=((-5,x[-1]+50))
-plt.xlabel('Reference T2 (ms)')
-plt.ylabel('MP-EPI T2 (ms)')
-plt.legend()
-#%%
-plt.figure()
-from sklearn.linear_model import LinearRegression
-X=T2_Flash_ave.reshape((-1, 1))
+#plt.xlim=((-5,x[-1]+50))
+plt.xlabel('Reference T2 (ms)',fontsize=14)
+plt.ylabel('MP-EPI T2 (ms)',fontsize=14)
+plt.legend(fontsize=14)
 
-model = LinearRegression()
-model=model.fit(X, T2_EPI_ave)
-#plt.errorbar(T1_SE_ave,T1_EPI_ave,T1_EPI_std,marker='*',label='EPI')
-r_sq = model.score(X, T2_EPI_ave)
-a=model.coef_[0]
-b=model.intercept_
-x=np.arange(0,T2_Flash_ave[-1],3)
-y=a*x + b
-plt.plot(x,y,linestyle='dashed',label='MP-EPI')
-plt.text(115,30,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}')
-plt.errorbar(T2_Flash_ave,T2_EPI_ave,T2_EPI_std, ls='none',ecolor='blue',color='blue',fmt='.', markersize='10',capsize=4, elinewidth=2)
-plt.plot(x,x,linestyle='solid',label='FLASH T2')
-plt.xlim=((-5,x[-1]+50))
-plt.xlabel('FLASH T2 (ms)')
-plt.ylabel('MP-EPI T2 (ms)')
-plt.legend()
-#%%
-#Plot the correlation plot --T2
-plt.figure()
-from sklearn.linear_model import LinearRegression
-X=T2_SE_ave.reshape((-1, 1))
-
-model = LinearRegression()
-model=model.fit(X, T2_Flash_ave)
-#plt.errorbar(T1_SE_ave,T1_EPI_ave,T1_EPI_std,marker='*',label='EPI')
-r_sq = model.score(X, T2_Flash_ave)
-a=model.coef_[0]
-b=model.intercept_
-x=np.arange(0,T2_SE_ave[-1],3)
-y=a*x + b
-plt.plot(x,y,linestyle='dashed',label='FLASH')
-plt.text(115,30,f'y={a:.3f}x+{b:.3f}\nR={r_sq:.3f}')
-plt.errorbar(T2_SE_ave,T2_Flash_ave,T2_Flash_std, ls='none',ecolor='blue',color='blue',fmt='.', markersize='10',capsize=4, elinewidth=2)
-plt.plot(x,x,linestyle='solid',label='Reference')
-plt.xlim=((-5,x[-1]+50))
-plt.xlabel('Reference T2 (ms)')
-plt.ylabel('FLASH T2 (ms)')
-plt.legend()
 # %%
 
-md, sd, mean, CI_low, CI_high = bland_altman_plot(T2_Flash_ave, T2_EPI_ave,Print_title='FLASH T2, MP-EPI T2')
+md, sd, mean, CI_low, CI_high = bland_altman_plot(T2_SE_ave, T2_EPI_ave,Print_title='FLASH T2, MP-EPI T2')
+plt.xlabel("Mean (Reference T2, MP-EPI T2) [ms]",fontsize=14)
+plt.ylabel("ΔT2 [ms]",fontsize=14)
 plt.show()
-md, sd, mean, CI_low, CI_high = bland_altman_plot(T2_SE_ave, T2_EPI_ave,Print_title='Reference T2, MP-EPI T2')
-plt.show()
-md, sd, mean, CI_low, CI_high = bland_altman_plot(T2_SE_ave, T2_Flash_ave,Print_title='Reference T2, FLASH T2')
-plt.show()
+
 # %%
-from scipy.stats import linregress
-import numpy as np
-import plotly.graph_objects as go
-def bland_altman_plot(data1, data2, data1_name='A', data2_name='B', subgroups=None, plotly_template='none', annotation_offset=0.05, plot_trendline=True, n_sd=1.96,*args, **kwargs):
-    data1 = np.asarray( data1 )
-    data2 = np.asarray( data2 )
-    mean = np.mean( [data1, data2], axis=0 )
-    diff = data1 - data2  # Difference between data1 and data2
-    md = np.mean( diff )  # Mean of the difference
-    sd = np.std( diff, axis=0 )  # Standard deviation of the difference
-
-
-    fig = go.Figure()
-
-    if plot_trendline:
-        slope, intercept, r_value, p_value, std_err = linregress(mean, diff)
-        trendline_x = np.linspace(mean.min(), mean.max(), 10)
-        fig.add_trace(go.Scatter(x=trendline_x, y=slope*trendline_x + intercept,
-                                 name='Trendline',
-                                 mode='lines',
-                                 line=dict(
-                                        width=4,
-                                        dash='dot')))
-    if subgroups is None:
-        fig.add_trace( go.Scatter( x=mean, y=diff, mode='markers', **kwargs))
-    else:
-        for group_name in np.unique(subgroups):
-            group_mask = np.where(np.array(subgroups) == group_name)
-            fig.add_trace( go.Scatter(x=mean[group_mask], y=diff[group_mask], mode='markers', name=str(group_name), **kwargs))
-
-
-
-    fig.add_shape(
-        # Line Horizontal
-        type="line",
-        xref="paper",
-        x0=0,
-        y0=md,
-        x1=1,
-        y1=md,
-        line=dict(
-            # color="Black",
-            width=6,
-            dash="dashdot",
-        ),
-        name=f'Mean {round( md, 2 )}',
-    )
-    fig.add_shape(
-        # borderless Rectangle
-        type="rect",
-        xref="paper",
-        x0=0,
-        y0=md - n_sd * sd,
-        x1=1,
-        y1=md + n_sd * sd,
-        line=dict(
-            color="SeaGreen",
-            width=2,
-        ),
-        fillcolor="LightSkyBlue",
-        opacity=0.4,
-        name=f'±{n_sd} Standard Deviations'
-    )
-
-    # Edit the layout
-    fig.update_layout( title=f'Bland-Altman Plot for {data1_name} and {data2_name}',
-                       xaxis_title=f'Average of {data1_name} and {data2_name}',
-                       yaxis_title=f'{data1_name} Minus {data2_name}',
-                       template=plotly_template,
-                       annotations=[dict(
-                                        x=1,
-                                        y=md,
-                                        xref="paper",
-                                        yref="y",
-                                        text=f"Mean {round(md,2)}",
-                                        showarrow=True,
-                                        arrowhead=7,
-                                        ax=50,
-                                        ay=0
-                                    ),
-                                   dict(
-                                       x=1,
-                                       y=n_sd*sd + md + annotation_offset,
-                                       xref="paper",
-                                       yref="y",
-                                       text=f"+{n_sd} SD",
-                                       showarrow=False,
-                                       arrowhead=0,
-                                       ax=0,
-                                       ay=-20
-                                   ),
-                                   dict(
-                                       x=1,
-                                       y=md - n_sd *sd + annotation_offset,
-                                       xref="paper",
-                                       yref="y",
-                                       text=f"-{n_sd} SD",
-                                       showarrow=False,
-                                       arrowhead=0,
-                                       ax=0,
-                                       ay=20
-                                   ),
-                                   dict(
-                                       x=1,
-                                       y=md + n_sd * sd - annotation_offset,
-                                       xref="paper",
-                                       yref="y",
-                                       text=f"{round(md + n_sd*sd, 2)}",
-                                       showarrow=False,
-                                       arrowhead=0,
-                                       ax=0,
-                                       ay=20
-                                   ),
-                                   dict(
-                                       x=1,
-                                       y=md - n_sd * sd - annotation_offset,
-                                       xref="paper",
-                                       yref="y",
-                                       text=f"{round(md - n_sd*sd, 2)}",
-                                       showarrow=False,
-                                       arrowhead=0,
-                                       ax=0,
-                                       ay=20
-                                   )
-                               ])
-    return fig
-
-#%%

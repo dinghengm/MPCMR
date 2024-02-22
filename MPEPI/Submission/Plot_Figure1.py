@@ -2,22 +2,13 @@
 ######It seems like copy all to DATASET
 ######Plot data
 ######
-
-
-
-
-
-
-
-
-
 #%%
 %matplotlib inline
 import os
 import sys
 sys.path.append('../') 
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v13 import readFolder,decompose_LRT,moco,moco_naive
+from libMapping_v13 import *
 import numpy as np
 import matplotlib.pyplot as plt
 import SimpleITK as sitk # conda pip install SimpleITK-SimpleElastix
@@ -32,7 +23,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 defaultPath= r'C:\Research\MRI\MP_EPI'
 plt.rcParams.update({'axes.titlesize': 'small'})
 import matplotlib
-from libMapping_v12 import *
 from SimulationFunction import *
 matplotlib.rcParams['savefig.dpi'] = 400
 
@@ -97,6 +87,8 @@ MP02=mapping(mapList[4])
 MP03=mapping(mapList[5])
 '''
 
+
+
 #%%
 MP01_list=[MP01_0,MP01_1,MP01_2]
 MPs_list=[MP01,MP02,MP03]
@@ -132,10 +124,13 @@ for ss,obj_T1 in enumerate(MP01_list):
 #%%
 #Update Mask
 #Read the contour:
-MP02_p=mapping(data=os.path.join(img_root_dir,'CIRC_00446_MP02_T2_p.mapping'))
+MP02_p=mapping(mapList[-2])
+MP01=mapping(mapList[-3])
+MP02=mapping(mapList[-2])
+MP03=mapping(mapList[-1])
 #Read the contour to others
 #Read the mask
-
+cropzone=MP02_p.cropzone
 #%%
 %matplotlib qt
 #Crop the data
@@ -179,6 +174,11 @@ plt.show()
 #Draw the overlay before and after moco
 #Before the moco: use _raw_data
 #Only needs the first slice:
+import copy
+MP01_p=copy.copy(MP01)
+MP02_p=copy.copy(MP02)
+MP03_p=copy.copy(MP03)
+
 fileList=MP01_list
 for obj in fileList:
     obj.cropzone=cropzone
@@ -328,10 +328,7 @@ if plot:
 MP02_p=mapping(data=os.path.join(img_root_dir,'CIRC_00446_MP02_T2_p.mapping'))
 MP03_p=mapping(data=os.path.join(img_root_dir,'CIRC_00446_MP03_DWI_p.mapping'))
 '''
-import copy
-MP01_p=copy.copy(MP01)
-MP02_p=copy.copy(MP02)
-MP03_p=copy.copy(MP03)
+
 
 
 temp=np.shape(MP02._data)
@@ -516,19 +513,88 @@ MP03.imshow_map(path=img_root_dir,plot=True)
 MP02.imshow_map(path=img_root_dir,plot=True)
 
 # %%
+def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2,searchtype='grid',
+            T1bound=[1,5000],invertPoint=4):
+    aEstTmps=[]
+    bEstTmps=[]
+    T1EstTmps=[]
+    resTmps=[]
+    #Make sure the data come in increasing TI-order
+    #index = np.argsort(TIlist)
+    #ydata=np.squeeze(data[index])
+    #Initialize variables:
+    minIndTmps=[]
+    minInd=np.argmin(data)
+    '''if minInd==0:
+        minInd=1
+    elif minInd==len(TIlist):
+        minInd=len(TIlist)-1'''
+    #Invert the data to 2x*before,at, 2x*after the min
+    invertPoint==None
+    if invertPoint==None:
+        iterNum=0,2
+    else:
+        iterNum=1-int(invertPoint/2),1+int(invertPoint/2)+1
+
+    for ii in range(iterNum[0],iterNum[1],1):
+        try:
+            minIndTmp=minInd+int(ii)
+            invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+            dataTmp=data*invertMatrix.T
+            minIndTmps.append(minIndTmp)
+        except:
+            continue
+
+        if searchtype == 'lm':
+            try: 
+                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_lm(data=dataTmp,TIlist=TIlist,
+                ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter)
+                aEstTmps.append(ra_exp)
+                bEstTmps.append(rb_exp)
+                T1EstTmps.append(T1_exp)
+                #Get the chisquare
+                resTmps.append(res)
+            except:
+                T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
+                aEstTmps.append(ra_exp)
+                bEstTmps.append(rb_exp)
+                T1EstTmps.append(T1_exp)
+                #Get the chisquare
+                resTmps.append(res)
+        elif searchtype== 'grid':
+            T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(data=dataTmp,TIlist=TIlist,T1bound=T1bound)
+            aEstTmps.append(ra_exp)
+            bEstTmps.append(rb_exp)
+            T1EstTmps.append(T1_exp)
+            #Get the chisquare
+            resTmps.append(res)
+    returnInd = np.argmin(np.array(resTmps))
+    T1_final=T1EstTmps[returnInd]
+    ra_final=aEstTmps[returnInd]
+    rb_final=bEstTmps[returnInd]
+    #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
+    return T1_final,ra_final,rb_final,resTmps,minIndTmps[returnInd]
+#%%
+
+pltDot=np.array([40,50])
+base_im_tmp=np.array([MP02_p._data[:, :, 0, 0],MP03_p._data[:, :, 0, 0]])
+base_im = np.mean(base_im_tmp,axis=0)
+plt.imshow(base_im,cmap='gray')
+plt.scatter(x=pltDot[1],y=pltDot[0])
+plt.show()
 
 
 ###Finally we plot one line data and plot as a xyz
-T1_line=MP01_0._data[40,50,0,:]   #First
-TIlist=MP01_0.valueList
+T1_line=MP01_0._data[pltDot[0],pltDot[1],0,:]   #First
+T1_line=np.delete(T1_line,-1)
 
+TIlist=np.array(MP01_0.valueList)
+TIlist=np.delete(TIlist,-1).tolist()
+print(TIlist,':',T1_line)
 T1_final_grid,ra_final_grid,rb_final_grid,_,returnInd=ir_fit(abs(T1_line),TIlist,searchtype='grid',T1bound=[1,5000])
-print(res)
-
-T1_final,ra_final,rb_final,resTmps,returnInd=ir_fit(abs(T1_line),TIlist,type='WLS',Niter=2,searchtype='lm')
 
 x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
-ydata_exp=abs(ir_recovery(x_plot,T1_final,ra_final,rb_final))
+ydata_exp=abs(ir_recovery(x_plot,T1_final_grid,ra_final_grid,rb_final_grid))
 plt.plot(x_plot,ydata_exp)
 
 plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(T1_line[0:returnInd]),color='r')
@@ -537,20 +603,167 @@ plt.legend(['Mz_Read'])
 plt.xlabel('Time (ms)')
 plt.ylabel('Magnetization')
 #plt.title(f'Simulation T1={T1} SNR={SNR}')
-plt.axis(xmin=np.min(time),xmax=np.max(time),ymin=-1,ymax=1)
-plt.text(x=8000,y=0,s=f'T1={int(T1_final)}\ny={ra_final:.02f}+{rb_final:.02f}*e^-t/{int(T1_final)}')
+#plt.axis(xmin=np.min(T1_line),xmax=np.max(T1_line),ymin=-1,ymax=1)
+plt.text(x=4000,y=0,s=f'T1={int(T1_final_grid)}\ny={ra_final_grid:.02f}+{rb_final_grid:.02f}*e^-t/{int(T1_final_grid)}')
 plt.grid('True')
+plt.show()
+plt.close()
+
+#%%
+
+zz=2
+%matplotlib inline
+pltDot=np.array([38,44])
+plt.imshow(MP01._map[:,:,zz],cmap='magma',vmin=0,vmax=3000)
+plt.scatter(x=pltDot[1],y=pltDot[0])
+plt.show()
+
+#%%
+%matplotlib inline
+mapT1=MP01_list[zz]
+Nd=MP01_1.Nd
+fig,axs=plt.subplots(1,Nd, figsize=(Nd*3.3,1*3),constrained_layout=True)            
+for d in range(Nd):
+
+        vmin = np.min(mapT1._data[:,:,0,:])
+        vmax = np.max(mapT1._data[:,:,0,:])
+        #alpha = mask_lv_crop[..., 0] * 1.0
+        axs[d].imshow(mapT1._data[:,:,0,d],cmap='gray',vmin=vmin,vmax=vmax)
+        #masked_mask = np.ma.masked_where(mask_lv_crop[..., 0] == 1, mask_lv_crop[..., 0])
+        #axs[1,d].contour(masked_mask, colors='red') 
+        
+        #axs[z,d].imshow(canvas)
+        #axs[z,d].imshow(mask_epi_crop[:,:,0])
+        #axs[z,d].imshow(mask_endo_crop[:,:,0])
+        axs[d].set_title(f'{mapT1.valueList[d]}',fontsize='small')
+        axs[d].axis('off')
+plt.show()
+#Slice1
+
+base_im_tmp=np.array([MP02_p._data[:, :, zz, 0],MP02_p._data[:, :, zz, 2]])
+base_im = np.mean(base_im_tmp,axis=0)
+plt.imshow(base_im,cmap='gray')
+plt.scatter(x=pltDot[1],y=pltDot[0])
+plt.show()
+
+
+###Finally we plot one line data and plot as a xyz
+T1_line=mapT1._data[pltDot[0],pltDot[1],0,:]   #First
+T1_line=np.delete(T1_line,[-1,-6])
+#T1_line=np.delete(T1_line,[-1])
+TIlist=np.array(mapT1.valueList)
+TIlist=np.delete(TIlist,[-1,-6]).tolist()
+#TIlist=np.delete(TIlist,[-1]).tolist()
+print(TIlist,':',T1_line)
+T1_final_grid,ra_final_grid,rb_final_grid,_,returnInd=ir_fit(abs(T1_line),TIlist,searchtype='grid',T1bound=[1,5000])
+
+x_plot=np.arange(start=1,stop=TIlist[-1],step=1)
+ydata_exp=abs(ir_recovery(x_plot,T1_final_grid,ra_final_grid,rb_final_grid))
+plt.plot(x_plot,ydata_exp)
+
+#plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(T1_line[0:returnInd]),color='r')
+plt.scatter(np.array(TIlist),np.abs(T1_line))
+plt.legend([f'T1={int(T1_final_grid)}'])
+plt.xlabel('Time (ms)')
+plt.ylabel('Magnetization')
+#plt.title(f'Simulation T1={T1} SNR={SNR}')
+#plt.axis(xmin=np.min(T1_line),xmax=np.max(T1_line),ymin=-1,ymax=1)
+#plt.text(x=4000,y=0,s=f'T1={int(T1_final_grid)}\ny={ra_final_grid:.02f}+{rb_final_grid:.02f}*e^-t/{int(T1_final_grid)}\nT1_map={mapT1._map[pltDot[0],pltDot[1],zz]}')
+#print(f'1={int(T1_final_grid)}\ny={ra_final_grid:.02f}+{rb_final_grid:.02f}*e^-t/{int(T1_final_grid)}')
+#print(f'T1_map={MP01._map[pltDot[0],pltDot[1],zz]}')
+#plt.grid('True')
 plt.show()
 plt.close()
 
 
 
+
+
+
+
+
+
+
 #%%
-T2_line=MP02._data[40,50,0,:]
-TIlist=MP02.valueList
-ADC_line=MP03._data[40,50,0,:]
+T2_line=MP02._data[pltDot[0],pltDot[1],2,:]
+T2list=MP02.valueList
+T2_exp,Mz_exp,res,ydata_exp=sub_mono_t2_fit_exp(T2_line,T2list)
+T2=MP02._map[pltDot[0],pltDot[1],zz]
+start=0
+stop=150
+x_plot=np.arange(start=start,stop=stop,step=1)
+ydata_exp=abs(T2_recovery(x_plot,T2_exp,Mz_exp))*np.max(T2_line)
 
-T1_exp,ra_exp,rb_exp,res,ydata_exp=sub_ir_fit_grid(T1_line,TIlist)
-print(res)
+plt.plot(x_plot,ydata_exp)
+
+#plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read[2,:][0:returnInd]),color='r')
+plt.scatter(np.array(T2list),T2_line)
+plt.legend([f'T2={T2_exp:.01f}'])
+plt.xlabel('Time (ms)')
+plt.ylabel('Magnetization')
+#plt.title(f'Simulation T2={T2}')
+plt.axis(xmin=0,xmax=stop,ymin=0)
+#plt.text(x=8000,y=0.5,s=f'T2={int(T2_exp)}\ny={Mz_exp:.02f}*e^-t/{T2_exp:.01f}')
+#plt.grid('True')
+plt.show()
+plt.close()
+
+#%%
+
+zz=2
+%matplotlib inline
+pltDot=np.array([38,44])
+plt.imshow(MP03._map[:,:,zz],cmap='hot',vmin=0,vmax=3)
+plt.scatter(x=pltDot[1],y=pltDot[0])
+plt.show()
 
 
+
+
+
+#%%
+Nd=MP03.Nd
+adc_val=MP03._map[pltDot[0],pltDot[1],zz]
+ADC_line=MP03._data[pltDot[0],pltDot[1],zz,:]
+Nbval=np.shape(MP03.bval[MP03.bval==50])[0]
+S50=np.zeros(Nbval)
+S500=np.zeros(Nbval)
+ADC_temp=np.zeros(Nbval)
+for j in range(Nbval):
+    S50[j]=ADC_line[j]
+    ind=np.arange(j,Nd,Nbval)[1::]
+    print('The b500 index:',ind)
+    #Go through all the b500
+    #Averaging all b500
+    S500[j]=np.mean(ADC_line[ind])
+ADC_temp=-1/450 * np.log(S500/S50)
+ADCmap=np.mean(ADC_temp)    #/1000
+
+S_b0=np.mean(S500)/np.exp(-500*ADCmap)
+def ADC_exp(b,adc,M0):
+    return M0*np.exp(-b*adc)
+
+
+ADC=ADCmap*1000    #*1000
+start=0
+stop=1000
+x_plot=np.arange(start=start,stop=stop,step=0.1)
+ydata_exp=abs(ADC_exp(x_plot,ADCmap,S_b0))
+
+plt.plot(x_plot,ydata_exp)
+
+#plt.scatter(np.array(TIlist[0:returnInd]),-1*np.abs(TI_read[2,:][0:returnInd]),color='r')
+
+plt.scatter(np.repeat(50.0,len(S50)),S50)
+plt.scatter(np.repeat(500.0,len(S500)),S500)
+plt.legend([f'ADC={ADC:.02f}'])
+plt.xlabel('b val (s/mm2)')
+plt.ylabel('Magnetization')
+#plt.title(f'Simulation T2={adc_val}')
+plt.axis(xmin=0,xmax=stop,ymin=0)
+#plt.text(x=8000,y=0.5,s=f'T2={int(T2_exp)}\ny={Mz_exp:.02f}*e^-t/{T2_exp:.01f}')
+#plt.grid('True')
+plt.show()
+plt.close()
+
+# %%
