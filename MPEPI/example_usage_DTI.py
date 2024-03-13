@@ -1,13 +1,13 @@
 #%%
 %matplotlib inline                        
-from libDiffusion import diffusion  # <--- this is all you need to do diffusion processing
+from libDiffusion_DCK import diffusion  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-path=fr'C:\Research\MRI\MP_EPI\CIRC_00446_22737_CIRC_00446_22737\CIRC_RESEARCH CIRC Research\MR ep2d_diff_Cima_M2_asym_3slices_b500_TE59_FOVphase37.5_ZOOMit'
+path=fr'C:\Research\MRI\MP_EPI\CIRC_00488_22737_CIRC_00488_22737\CIRC_RESEARCH CIRC Research\MR ep2d_diff_Cima_M2_asym_5slices_b500_TE59_FOVphase37.5'
 dti = diffusion(data=path,ID='Zoomit_3Slice')
 
 #%%

@@ -29,8 +29,8 @@ matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
 #%%
-CIRC_ID='CIRC_00435'
-#CIRC_ID='CIRC_00438'
+#CIRC_ID='CIRC_00435'
+CIRC_ID='CIRC_00438'
 img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
@@ -220,5 +220,54 @@ if plot:
     plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_4"))
     #plt.savefig(os.path.join(img_save_dir, f"{map_lge.ID}_all"))
 plt.show()
+
+# %%
+#Read clinical data
+img_save_dir=os.path.join(img_root_dir,CIRC_ID)
+mapList=[]
+for dirpath,dirs,files in  os.walk(img_save_dir):
+    for x in files:
+        path=os.path.join(dirpath,x)
+        if path.endswith('MOLLI_p.mapping') or path.endswith('FLASH_p.mapping') or path.endswith('MOLLI_post_p.mapping'):
+                mapList.append(path)
+print(mapList)
+# %%
+map_T1=mapping(mapList[0])
+map_T1_post=mapping(mapList[1])
+map_T2=mapping(mapList[2])
+#%%
+%matplotlib qt
+for map in [map_T1,map_T2]:
+    crange=map.crange
+    cmap=map.cmap
+    map.go_segment_LV(image_type='map',crange=crange,cmap=cmap,roi_names=['septal','lateral'])
+#%%
+map_T1_post.go_segment_LV(image_type='map',crange=map_T1_post.crange,cmap=map_T1_post.cmap,roi_names=['endo','epi','septal','lateral'])
+
+#%%
+%matplotlib inline
+for map in [map_T1,map_T1_post,map_T2]:
+    # create images images per map type
+    num_slice = map.Nz
+    figsize = (3.4*num_slice, 3)
+    fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)
+    crange=map.crange
+    cmap=map.cmap
+
+    for sl in range(num_slice):
+        axes[sl].set_axis_off()
+        im = axes[sl].imshow(map._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap)
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75, pad=0.018, aspect=18)
+    plt.savefig(os.path.join(img_save_dir, f"{map.ID}"))
+    plt.show()
+
+    map.show_calc_stats_LV()
+    map.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Dec.csv',crange=crange)
+    map.save(filename=os.path.join(img_root_dir,f'{map.CIRC_ID}_{map.ID}_plus200_p.mapping'))
+    print('Saved the segmentation sucessfully')
+    #Save again
+    map.save()
+    print('Saved the segmentation sucessfully')
+    map.imshow_overlay(path=img_save_dir,ID=f'{map.ID}_overlay',plot=plot)
 
 # %%

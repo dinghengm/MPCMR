@@ -9,7 +9,6 @@
 ###############Then from data/contours generate AREA, MP01, MP02,MP03, All, Epi, Endo, 
 
 #%%
-import sys
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
@@ -94,12 +93,15 @@ def calc_misArea(mask,ind_label,slice,label,resolution=1.4):
     return valDict
 
 
+
+
+
 #%%
 ####################405 has to regenerate MP03-DWI######################
 CIRC_ID_List=[446,429,419,405,398,382,381,373,457,472,486,498,500]
 #CIRC_NUMBER=CIRC_ID_List[9]
 
-CIRC_NUMBER=CIRC_ID_List[0]
+CIRC_NUMBER=CIRC_ID_List[4]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024','NULL',f'{CIRC_ID}')
@@ -171,8 +173,17 @@ for ss,mp01 in enumerate(MP01_list):
     dictData_raw.update(dicttmp)
 #%%
 #########Save the dict
+
+
 moco_stats = pd.DataFrame(dictData, index=[0])
 moco_raw_stats = pd.DataFrame(dictData_raw, index=[0])
+
+
+
+
+
+
+
 filename=os.path.join(defaultPath,f'MisRegristeredArea.csv')
 def exportData(data,filename):
     if os.path.isfile(filename):    
@@ -216,7 +227,7 @@ def bmode(data=None,ID=None,x=None,y=None,plot=False,path=None):
     elif Nz==1:
         plt.subplot(121)
         plt.imshow(data.squeeze()[...,0],cmap='gray')
-        #plt.axis('off')
+        plt.axis('off')
         if x is not None:
             plt.axhline(y=x, color='r', linestyle='-')
         if y is not None:
@@ -224,7 +235,7 @@ def bmode(data=None,ID=None,x=None,y=None,plot=False,path=None):
         plt.subplot(122)
         A3=np.squeeze(A2)
         plt.imshow(A3,cmap='gray')
-        #plt.axis('off')
+        plt.axis('off')
     if plot==True:
         dir=os.path.join(path,ID)
         plt.savefig(dir)
