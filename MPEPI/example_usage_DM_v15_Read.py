@@ -164,10 +164,6 @@ for obj in MPs_list:
 
 
 #%%
-
-#---...-----
-#Please calculate the maps in a loop
-#%%
 #Calculate the T1 maps
 for ss,obj_T1 in enumerate(MP01_list):
     finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=4)

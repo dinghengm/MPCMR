@@ -25,7 +25,7 @@ plot=True
 #%%
 CIRC_ID_List=[446,452,429,419,405,398,382,381,373,457,471,472,486,498,500]
 #CIRC_NUMBER=CIRC_ID_List[9]
-CIRC_NUMBER=CIRC_ID_List[-3]
+CIRC_NUMBER=CIRC_ID_List[-1]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024','WITH8000',f'{CIRC_ID}')
@@ -33,13 +33,13 @@ mapList=[]
 for dirpath,dirs,files in  os.walk(img_root_dir):
     for x in files:
         path=os.path.join(dirpath,x)
-        if path.endswith('p.mapping'):
+        if path.endswith('m.mapping'):
             mapList.append(path)
-MP01=mapping(mapList[0])
-MP02=mapping(mapList[1])
+MP01=mapping(mapList[-3])
+MP02=mapping(mapList[-2])
 #dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
-MP03=mapping(mapList[2])
+MP03=mapping(mapList[-1])
 #%%
 def imshowMap(obj,path,plot):
     num_slice=obj.Nz

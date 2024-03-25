@@ -35,6 +35,7 @@ for dirpath,dirs,files in  os.walk(img_root_dir):
         path=os.path.join(dirpath,x)
         if path.endswith('m.mapping'):
             mapList.append(path)
+print(mapList)
 MP01=mapping(mapList[3])
 MP02=mapping(mapList[4])
 #dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
@@ -61,12 +62,14 @@ def imshowMap(obj,path,plot):
     pass
 #%%
 
-maps_save_dir=os.path.join(os.path.dirname(img_root_dir),'maps')
-img_save_dir=img_root_dir
+maps_save_dir=os.path.join(r'C:\Research\MRI\MP_EPI\DataSet','maps')
+img_save_dir=rf'C:\Research\MRI\MP_EPI\DataSet\CIRC_00{CIRC_NUMBER}'
 
 %matplotlib inline
 if not os.path.exists(maps_save_dir):
     os.makedirs(maps_save_dir) 
+if not os.path.exists(img_save_dir):
+    os.makedirs(img_save_dir) 
 imshowMap(obj=MP02,plot=plot,path=maps_save_dir)
 imshowMap(obj=MP01,plot=plot,path=maps_save_dir)
 imshowMap(obj=MP03,plot=plot,path=maps_save_dir)
@@ -74,14 +77,12 @@ imshowMap(obj=MP03,plot=plot,path=maps_save_dir)
 
 #%%
 %matplotlib qt
-MP03.go_segment_LV(reject=None, image_type="b0",roi_names=['endo', 'epi','septal','lateral'],crange=[0,150])
+MP02.go_segment_LV(reject=None, image_type="b0",roi_names=['endo', 'epi'],crange=[0,150])
 #MP02.go_segment_LV(reject=None, image_type="map",roi_names=['endo', 'epi','septal','lateral'])
 
 #%%
 
-MP02._update_mask(MP03)
-
-
+MP03._update_mask(MP02)
 MP01._update_mask(MP02)
 MP02.show_calc_stats_LV()
 MP01.show_calc_stats_LV()
@@ -160,9 +161,9 @@ def testing_reseg(obj1,obj2,obj3):
             obj1.show_calc_stats_LV()
             obj2.show_calc_stats_LV()
             obj3.show_calc_stats_LV()
-    obj1.save(filename=os.path.join(img_save_dir,f'{obj1.CIRC_ID}_{obj1.ID}_p.mapping')) 
-    obj2.save(filename=os.path.join(img_save_dir,f'{obj2.CIRC_ID}_{obj2.ID}_p.mapping')) 
-    obj3.save(filename=os.path.join(img_save_dir,f'{obj3.CIRC_ID}_{obj3.ID}_p.mapping')) 
+    #obj1.save(filename=os.path.join(img_save_dir,f'{obj1.CIRC_ID}_{obj1.ID}_p.mapping')) 
+    #obj2.save(filename=os.path.join(img_save_dir,f'{obj2.CIRC_ID}_{obj2.ID}_p.mapping')) 
+    #obj3.save(filename=os.path.join(img_save_dir,f'{obj3.CIRC_ID}_{obj3.ID}_p.mapping')) 
     pass
 
 #%%
@@ -172,8 +173,7 @@ testing_reseg(MP01,MP02,MP03)
 # %% View Maps Overlay
 
 %matplotlib inline
-
-overlay_save_dir=os.path.join(os.path.dirname(img_root_dir),'overlay')
+overlay_save_dir=os.path.join(r'C:\Research\MRI\MP_EPI\DataSet','overlay')
 
 num_slice = MP01.Nz 
 figsize = (3.4*num_slice, 3)
@@ -230,7 +230,7 @@ MP02.show_calc_stats_LV()
 MP03.show_calc_stats_LV()
 MP01.show_calc_stats_LV()
 #%%
-filename=os.path.join(os.path.dirname(img_root_dir),'mapping_Feb.csv')
+filename=os.path.join(os.path.dirname(img_root_dir),'mapping_March.csv')
 MP01.export_stats(filename=filename,crange=[0,1800])
 MP02.export_stats(filename=filename,crange=[0,150])
 MP03.export_stats(filename=filename,crange=[0,3])

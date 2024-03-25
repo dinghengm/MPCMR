@@ -5,19 +5,11 @@
 #############Shape Nx,Ny,Nd
 ################
 ############## The Contour can save for later in DL
-
-
 #%%
-import argparse
-import sys
 from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import scipy.io as sio
-from tqdm.auto import tqdm # progress bar
-import pandas as pd
-import h5py
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 defaultPath= r'C:\Research\MRI\MP_EPI'
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -31,10 +23,9 @@ from skimage import measure
 matplotlib.rcParams['savefig.dpi'] = 400
 plot=True
 #%%
-####################405 has to regenerate MP03-DWI
-CIRC_ID_List=[446,429,419,405,398,382,381,373,457,472,486,498,500]
+CIRC_ID_List=[446,429,419,405,398,382,381,373,472,486,498,500]
 #CIRC_NUMBER=CIRC_ID_List[9]
-CIRC_NUMBER=CIRC_ID_List[1]
+CIRC_NUMBER=CIRC_ID_List[-2]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024','NULL',f'{CIRC_ID}')
@@ -74,16 +65,16 @@ data0MP03=MP03._data[:,:,ss,:]
 data0MP02_raw=MP02._raw_data[:,:,ss,:]
 data0MP03_raw=MP03._raw_data[:,:,ss,:]
 
+
 dataSlice0=np.concatenate((map01._data,data0MP02[:,:,np.newaxis,:],data0MP03[:,:,np.newaxis,:]),axis=-1)
 #dataSlice1_raw=np.concatenate((MP01_1._raw_data,MP02._raw_data[:,:,1,:],MP03._raw_data[:,:,1,:]))
 #dataSlice2_raw=np.concatenate((MP01_2._raw_data,MP02._raw_data[:,:,2,:],MP03._raw_data[:,:,2,:]))
-bval0=list(map01.valueList+MP02.valueList)+list(MP03.bval)
+#bval0=list(map01.valueList+MP02.valueList)+list(MP03.bval)
 cmap='gray'
 brightness=0.6
 Nx,Ny,Nd=np.shape(dataSlice0.squeeze())
 #%%
 def draw_ROI_all(data,brightness=0.6,cmap='gray',d=-1):
-    
     Nx,Ny,Nd=np.shape(data.squeeze())
     if d==-1:
         slices=range(Nd)
@@ -105,6 +96,7 @@ def draw_ROI_all(data,brightness=0.6,cmap='gray',d=-1):
             fig.canvas.manager.set_window_title('Nd: '+ str(dd)+f'/{Nd}')
             multirois = MultiRoi(fig=fig, roi_names=roi_names)
             try:
+                #If we don't have endo, then go to the next slide
                 mask_endo[:,:,dd]=multirois.rois['endo'].get_mask(image)
             except:
                 continue
@@ -113,6 +105,7 @@ def draw_ROI_all(data,brightness=0.6,cmap='gray',d=-1):
             mask_lv[:,:,dd]=mask_endo[:,:,dd]^mask_epi[:,:,dd]
         
         plt.close()
+        #If epi is not true, will have except, then will stop the whole loop
     except:
         return mask_endo,mask_epi,mask_lv
     return mask_endo,mask_epi,mask_lv
@@ -139,12 +132,12 @@ def plot_ROI(data,mask_lv):
 mask_endo,mask_epi,mask_lv=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap)
 #%%
 %matplotlib qt
-d=range(16,30)
+d=range(15,31)
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
-    mask_endo[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 #%%
 %matplotlib inline
@@ -177,9 +170,9 @@ mask_endo_raw,mask_epi_raw,mask_lv_raw=draw_ROI_all(dataSlice0_raw_new,brightnes
 d=[12,15]
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0_raw_new,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
-    mask_endo_raw[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi_raw[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv_raw[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo_raw[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi_raw[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv_raw[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 #%%
 %matplotlib inline
@@ -218,12 +211,12 @@ Nx,Ny,Nd=np.shape(dataSlice0.squeeze())
 mask_endo,mask_epi,mask_lv=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap)
 #%%
 %matplotlib qt
-d=range(17,Nd)
+d=range(16,30)
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
-    mask_endo[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 #%%
 %matplotlib inline
@@ -256,19 +249,16 @@ mask_endo_raw,mask_epi_raw,mask_lv_raw=draw_ROI_all(dataSlice0_raw_new,brightnes
 #%%
 #####Redraw ROI
 %matplotlib qt
-d=range(17,Nd)
+d=[31]
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0_raw_new,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
-    mask_endo_raw[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi_raw[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv_raw[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo_raw[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi_raw[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv_raw[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 #%%
 %matplotlib inline
 plot_ROI(dataSlice0_raw_new,mask_lv_raw)
-
-
-
 
 #%%
 np.save(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_data_raw'),dataSlice0_raw_new)
@@ -285,7 +275,7 @@ dataDict[f'Slice{ss}_lv_raw']=mask_lv_raw
 %matplotlib qt
 
 ss=2
-brightness=1.2
+brightness=1.3
 
 map01=MP01_List[ss]
 data0MP02=MP02._data[:,:,ss,:]
@@ -304,12 +294,13 @@ Nx,Ny,Nd=np.shape(dataSlice0.squeeze())
 mask_endo,mask_epi,mask_lv=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap)
 #%%
 %matplotlib qt
-d=[18,20]
+d=range(18,32)
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0,brightness=brightness,cmap=cmap,d=d)
+
 for ind,dd in enumerate(d):
-    mask_endo[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 #%%
 %matplotlib inline
@@ -323,7 +314,25 @@ dataDict[f'Slice{ss}_data']=dataSlice0.squeeze()
 dataDict[f'Slice{ss}_endo']=mask_endo
 dataDict[f'Slice{ss}_epi']=mask_epi
 dataDict[f'Slice{ss}_lv']=mask_lv
+'''
+cropzone=MP02.cropzone
+dataSlice0_raw=np.concatenate((map01._raw_data,data0MP02_raw[:,:,np.newaxis,:],data0MP03_raw[:,:,np.newaxis,:]),axis=-1)
+_,_,Nd=np.shape(dataSlice0_raw.squeeze())
+new_data= MP02._crop_Auto(data=dataSlice0_raw)
+Nxtmp,Nytmp,_,_=np.shape(new_data)
+dataSlice0_raw_new_tmp=np.zeros((Nxtmp*2,Nytmp*2,Nd))
+for d in range(Nd):
+    dataSlice0_raw_new_tmp[...,d]=imresize(new_data.squeeze()[...,d],(Nxtmp*2,Nytmp*2))
 
+%matplotlib qt
+dataSlice0_raw_new=np.zeros((Nx,Ny,Nd))
+
+tmp= MP02._crop(data=dataSlice0_raw_new_tmp,cropzone=cropzone)
+for d in range(Nd):
+    dataSlice0_raw_new[...,d]=imresize(tmp.squeeze()[...,d],(Nx,Ny))
+'''
+
+#Test on Raw
 
 dataSlice0_raw=np.concatenate((map01._raw_data,data0MP02_raw[:,:,np.newaxis,:],data0MP03_raw[:,:,np.newaxis,:]),axis=-1)
 _,_,Nd=np.shape(dataSlice0_raw.squeeze())
@@ -334,6 +343,9 @@ for d in range(Nd):
     dataSlice0_raw_new[...,d]=imresize(new_data.squeeze()[...,d],(Nx,Ny))
 
 
+
+
+
 #%%
 %matplotlib qt
 mask_endo_raw,mask_epi_raw,mask_lv_raw=draw_ROI_all(dataSlice0_raw_new,brightness=brightness,cmap=cmap)
@@ -341,7 +353,7 @@ mask_endo_raw,mask_epi_raw,mask_lv_raw=draw_ROI_all(dataSlice0_raw_new,brightnes
 #%%
 #####Redraw ROI
 %matplotlib qt
-d=range(17,Nd)
+d=[9]
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(dataSlice0_raw_new,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
     mask_endo_raw[:,:,dd]=mask_endo_tmp[:,:,ind]
@@ -366,7 +378,6 @@ for key,val in dataDict.items():
     print(f'{key}:{np.shape(val)}')
 
 #%%
-#%%
 
 saveDict_name=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_data.pkl')
 with open(saveDict_name, 'wb') as fp:
@@ -377,6 +388,7 @@ with open(saveDict_name, 'wb') as fp:
 #%%
 #bmode
 def bmode(data=None,ID=None,x=None,y=None,plot=False,path=None):
+
 
     Nx,Ny,Nz,Nd=np.shape(data)
     if x==None and y==None:
@@ -416,15 +428,18 @@ def bmode(data=None,ID=None,x=None,y=None,plot=False,path=None):
     plt.show()
 for ss in range(3):
     print('raw')
-    bmode(data=dataDict[f'Slice{ss}_data_raw'][:,:,np.newaxis,:],
-            plot=True,
-            ID=f'Slice{ss}_bmode_raw',
-            path=img_save_dir)
-    print('moco')
-    bmode(data=dataDict[f'Slice{ss}_data'][:,:,np.newaxis,:],
-            plot=True,
-            ID=f'Slice{ss}_bmode',
-            path=img_save_dir)
+    try:
+        bmode(data=dataDict[f'Slice{ss}_data_raw'][:,:,np.newaxis,:],
+                plot=True,
+                ID=f'Slice{ss}_bmode_raw',
+                path=img_save_dir)
+        print('moco')
+        bmode(data=dataDict[f'Slice{ss}_data'][:,:,np.newaxis,:],
+                plot=True,
+                ID=f'Slice{ss}_bmode',
+                path=img_save_dir)
+    except:
+        pass
 #MP02.bmode(data=dataDict1[f'Slice{ss}_data'][:,:,np.newaxis,:])
 #%%
 def plotAve(data,masklv,plot=False,path=None,ID=None):
@@ -447,19 +462,21 @@ def plotAve(data,masklv,plot=False,path=None,ID=None):
 
     plt.show()
 for ss in range(3):
-    print('raw')
-    plotAve(data=dataDict[f'Slice{ss}_data_raw'][:,:,np.newaxis,:],
-            masklv=dataDict[f'Slice{ss}_lv_raw'][:,:,np.newaxis,:],
-            plot=True,
-            ID=f'Slice{ss}_mean_raw',
-            path=img_save_dir)
-    print('moco')
-    plotAve(data=dataDict[f'Slice{ss}_data'][:,:,np.newaxis,:],
-            masklv=dataDict[f'Slice{ss}_lv'][:,:,np.newaxis,:], 
-            plot=True,
-            ID=f'Slice{ss}_mean',
-            path=img_save_dir)
-
+    try:
+        print('raw')
+        plotAve(data=dataDict[f'Slice{ss}_data_raw'][:,:,np.newaxis,:],
+                masklv=dataDict[f'Slice{ss}_lv_raw'][:,:,np.newaxis,:],
+                plot=True,
+                ID=f'Slice{ss}_mean_raw',
+                path=img_save_dir)
+        print('moco')
+        plotAve(data=dataDict[f'Slice{ss}_data'][:,:,np.newaxis,:],
+                masklv=dataDict[f'Slice{ss}_lv'][:,:,np.newaxis,:], 
+                plot=True,
+                ID=f'Slice{ss}_mean',
+                path=img_save_dir)
+    except:
+        pass
 
 
 
@@ -508,8 +525,57 @@ plt.savefig(os.path.join(img_save_dir,f'contours'))
 plt.show()
 
 #%%
+##############Plot contours based on MP010203
+%matplotlib inline
+plt.figure()
+MP01_list=[MP01_0,MP01_1,MP01_2]
+for ss in range(3):
+    
+
+    image_data=dataDict[f'Slice{ss}_data']
+    mask_lv=dataDict[f'Slice{ss}_lv']
+    mp01=MP01_list[ss]
+    indtmp=np.shape(mp01._data)[-1]   
+    ind_label=[0,indtmp,indtmp+MP02.Nd,indtmp+MP02.Nd+MP03.Nd]
+
+    #MP01
+    for contrast in range(3):
+        plt.subplot(3,4,4*ss+contrast+2)
+        plt.imshow(image_data[...,0].squeeze(),cmap='gray',vmax=1e10)
+        indList_tmp=range(ind_label[contrast],ind_label[contrast+1])
+        for d in indList_tmp:
+            image=mask_lv[:,:,d]*255-1
+            img=np.float16(image)
+            contours = measure.find_contours(img, 240)
+            try:
+                plt.plot(contours[0][:, 1], contours[0][:, 0] ,"r", linewidth=0.7)
+                plt.plot(contours[1][:, 1], contours[1][:, 0] ,"g", linewidth=0.7)
+            except:
+                continue
+            plt.axis('off')
+
+for ss in range(3):
+    plt.subplot(3,4,4*ss+1)
+    image_data=dataDict[f'Slice{ss}_data_raw']
+    mask_lv=dataDict[f'Slice{ss}_lv_raw']
+    Nd=np.shape(image_data)[-1]
+    plt.imshow(image_data[...,0].squeeze(),cmap='gray',vmax=1e10)
+    for d in range(Nd):
+        image=mask_lv[:,:,d]*255-1
+        img=np.float16(image)
+
+        contours = measure.find_contours(img, 240)
+        try:
+            plt.plot(contours[0][:, 1], contours[0][:, 0] ,"r", linewidth=0.7)
+            plt.plot(contours[1][:, 1], contours[1][:, 0] ,"g", linewidth=0.7)
+        except:
+            continue
+        plt.axis('off')
+plt.savefig(os.path.join(img_save_dir,f'contours_BasedonMP'))
+plt.show()
+#%%
 ###############Reseg
-ss=2
+ss=0
 image_data=dataDict[f'Slice{ss}_data']
 mask_lv=dataDict[f'Slice{ss}_lv']
 mask_endo=dataDict[f'Slice{ss}_endo']
@@ -521,13 +587,13 @@ plot_ROI(image_data,mask_endo)
 print(np.shape(image_data))
 #%%
 %matplotlib qt
-d=range(16,32)
-brightness=1.2
+d=range(16,29)
+brightness=0.8
 mask_endo_tmp,mask_epi_tmp,mask_lv_tmp=draw_ROI_all(image_data,brightness=brightness,cmap=cmap,d=d)
 for ind,dd in enumerate(d):
-    mask_endo[:,:,dd]=mask_endo_tmp[:,:,ind]
-    mask_epi[:,:,dd]=mask_epi_tmp[:,:,ind]
-    mask_lv[:,:,dd]=mask_lv_tmp[:,:,ind]
+    mask_endo[:,:,dd]=mask_endo_tmp[:,:,dd]
+    mask_epi[:,:,dd]=mask_epi_tmp[:,:,dd]
+    mask_lv[:,:,dd]=mask_lv_tmp[:,:,dd]
 
 
 #%%
@@ -546,6 +612,26 @@ saveDict_name=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_data.pkl')
 with open(saveDict_name, 'rb') as inp:
     dataDict2 = pickle.load(inp)
 print('dictionary Load successfully to file')
+#%%
+import copy
+dataDict=copy.copy(dataDict2)
+
+#%%
+dataDict = {}
+for ss in range(3):
+    dataDict[f'Slice{ss}_data']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_data.npy'))
+    dataDict[f'Slice{ss}_endo']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_endo.npy'))
+    dataDict[f'Slice{ss}_epi']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_epi.npy'))
+    dataDict[f'Slice{ss}_lv']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_masklv.npy'))
+    dataDict[f'Slice{ss}_data_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_data_raw.npy'))
+    dataDict[f'Slice{ss}_endo_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_endo_raw.npy'))
+    dataDict[f'Slice{ss}_epi_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_epi_raw.npy'))
+    dataDict[f'Slice{ss}_lv_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_masklv_raw.npy'))
+
+
+
+
+
 #%%
 for key,val in dataDict2.items():
     print(f'{key}:{np.shape(val)}')
@@ -588,7 +674,7 @@ for ss in range(3):
         except:
             continue
         plt.axis('off')
-plt.savefig(os.path.join(img_save_dir,f'contours'))
-plt.show()
+#plt.savefig(os.path.join(img_save_dir,f'contours'))
+#plt.show()
 
 # %%

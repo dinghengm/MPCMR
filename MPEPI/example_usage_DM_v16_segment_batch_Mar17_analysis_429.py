@@ -49,7 +49,6 @@ def calc_misArea(mask,ind_label,slice,label,resolution=1.4):
             label= 'endo' or 'epi'
         return:
             misarea: dict with MP01,MP02,MP03,gobal mean, gobal 
-
     ''' 
     #Store the MP01,MP02,MP03mis area
     valList=[]
@@ -66,12 +65,12 @@ def calc_misArea(mask,ind_label,slice,label,resolution=1.4):
                 continue
             else:
                 indList_tmp.append(i)
-        print('The number of repetition is',len(indList_tmp))
+        print(f'The number of repetition is',len(indList_tmp))
         print(indList_tmp)
         for dd in indList_tmp:
             
             if dd==ind:
-                #If target remove
+                #If target, remove
                 continue
             prediction=mask[:,:,dd]
             intersection = np.logical_and(target, prediction)
@@ -82,13 +81,13 @@ def calc_misArea(mask,ind_label,slice,label,resolution=1.4):
             areaList.append(area)
         mis_area=np.sum(areaList)/len(areaList)
         #print(mis_area)    
-        valDict[f'Slice{slice}_{label}_MP0{contrast+1}']=mis_area
+        valDict[rf'Slice{slice}_{label}_MP0{contrast+1}']=np.round(mis_area,2)
         try:
             valList.append(mis_area)
         except:
             continue
-    valDict[f'Slice{slice}_{label}_global']=np.mean(valList)
-    valDict[f'Slice{slice}_{label}_global std']=np.std(valList)
+    valDict[rf'Slice{slice}_{label}_global']=np.round(np.mean(valList),2)
+    valDict[rf'Slice{slice}_{label}_global std']=np.round(np.std(valList),2)
     return valDict
 
 def calc_misArea_perArea(mask,ind_label,slice,label,resolution=1.4):
@@ -147,13 +146,13 @@ def calc_misArea_perArea(mask,ind_label,slice,label,resolution=1.4):
             areaList.append(unitarea)
         mis_area_unit=np.sum(areaList)/len(areaList)
         #print(mis_area)    
-        valDict[f'Slice{slice}_{label}_MP0{contrast+1}']=mis_area_unit
+        valDict[f'Slice{slice}_{label}_MP0{contrast+1}']=np.round(mis_area_unit,2)
         try:
             valList.append(mis_area_unit)
         except:
             continue
-    valDict[f'Slice{slice}_{label}_global']=np.mean(valList)
-    valDict[f'Slice{slice}_{label}_global std']=np.std(valList)
+    valDict[f'Slice{slice}_{label}_global']=np.round(np.mean(valList),2)
+    valDict[f'Slice{slice}_{label}_global std']=np.round(np.std(valList),2)
     return valDict
 
 
@@ -164,7 +163,7 @@ def calc_misArea_perArea(mask,ind_label,slice,label,resolution=1.4):
 CIRC_ID_List=[446,429,419,398,382,381,373,472,486,498,500]
 #CIRC_NUMBER=CIRC_ID_List[9]
 
-CIRC_NUMBER=CIRC_ID_List[5]
+CIRC_NUMBER=CIRC_ID_List[1]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
 img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Feb_5_2024','NULL',f'{CIRC_ID}')
@@ -192,15 +191,21 @@ MP02=mapping(mapList[4])
 MP03=mapping(mapList[5])
 print(mapList)
 #%%
+#Read the ROI from all npy array
+
 #Def misregistered area/area
 #Test load
-saveDict_name=os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_data.pkl')
-with open(saveDict_name, 'rb') as inp:
-    dataDict = pickle.load(inp)
-print(saveDict_name)
-print('dictionary Load successfully to file')
-
-
+#dataDict is the npy array
+dataDict = {}
+for ss in range(3):
+    dataDict[f'Slice{ss}_data']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_data.npy'))
+    dataDict[f'Slice{ss}_endo']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_endo.npy'))
+    dataDict[f'Slice{ss}_epi']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_epi.npy'))
+    dataDict[f'Slice{ss}_lv']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_masklv.npy'))
+    dataDict[f'Slice{ss}_data_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_data_raw.npy'))
+    dataDict[f'Slice{ss}_endo_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_endo_raw.npy'))
+    dataDict[f'Slice{ss}_epi_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_epi_raw.npy'))
+    dataDict[f'Slice{ss}_lv_raw']=np.load(os.path.join(img_save_dir,f'{MP01_0.CIRC_ID}_Slice{ss}_masklv_raw.npy'))
 
 
 #%%
@@ -221,8 +226,13 @@ for ss,mp01 in enumerate(MP01_list):
     mask_endo=dataDict[f'Slice{ss}_endo']
     dicttmp=calc_misArea(mask_endo,ind_label,ss,'endo')
     dictData.update(dicttmp)
+    #epi
     mask_epi=dataDict[f'Slice{ss}_epi']
     dicttmp=calc_misArea(mask_epi,ind_label,ss,'epi')
+    dictData.update(dicttmp)
+    #lv
+    mask_lv=dataDict[f'Slice{ss}_lv']
+    dicttmp=calc_misArea(mask_lv,ind_label,ss,'lv')
     dictData.update(dicttmp)
     #Raw
     ind_label=[]
@@ -234,6 +244,13 @@ for ss,mp01 in enumerate(MP01_list):
     mask_epi=dataDict[f'Slice{ss}_epi_raw']
     dicttmp=calc_misArea(mask_epi,ind_label,ss,'epi')
     dictData_raw.update(dicttmp)
+    #raw
+    mask_lv=dataDict[f'Slice{ss}_lv_raw']
+    dicttmp=calc_misArea(mask_lv,ind_label,ss,'lv')
+    dictData_raw.update(dicttmp)
+
+
+
 #%%
 #########Save the dict
 
@@ -241,10 +258,29 @@ for ss,mp01 in enumerate(MP01_list):
 moco_stats = pd.DataFrame(dictData, index=[0])
 moco_raw_stats = pd.DataFrame(dictData_raw, index=[0])
 
+#%%
+#Calculate the mean of MP01,MP02,MP03??
+# Global_MP01_endo	
+# Global_MP02_endo	
+# Global_MP03_endo	
+# Global_MP01_epi	
+# Global_MP02_epi	
+# Global_MP03_epi	
+# Global_enco	
+# Global_epi
+for df in [moco_stats,moco_raw_stats]:
+    for area in ['endo','epi','lv']:
+        for contrast in [1,2,3]:
+            columns_to_average = [f'Slice0_{area}_MP0{contrast}', f'Slice1_{area}_MP0{contrast}', f'Slice2_{area}_MP0{contrast}']
+            df[f'Global_MP0{contrast}_{area}']=df[columns_to_average].mean().mean()
+
+for df in [moco_stats,moco_raw_stats]:
+    for area in ['endo','epi','lv']:
+        columns_to_average = [f'Global_MP01_{area}', f'Global_MP02_{area}', f'Global_MP03_{area}']
+        df[f'Global_{area}']=df[columns_to_average].mean().mean()
 
 
-
-
+#%%
 
 ###############As of March 15 old version
 #filename=os.path.join(defaultPath,f'MisRegristeredArea.csv')
@@ -299,7 +335,7 @@ for ss,mp01 in enumerate(MP01_list):
 moco_stats = pd.DataFrame(dictData, index=[0])
 moco_raw_stats = pd.DataFrame(dictData_raw, index=[0])
 
-filename=os.path.join(defaultPath,f'MisRegristeredAreaperUnit.csv')
+filename=os.path.join(defaultPath,f'MisRegristeredAreaperUnit_March15.csv')
 def exportData(data,filename):
     if os.path.isfile(filename):    
         data.to_csv(filename, index=False, header=False, mode='a')
