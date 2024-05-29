@@ -64,22 +64,36 @@ MP03=mapping(mapList[9])
 
 
 #%%
-
-MP01_2try_1=mapping(os.path.join(saved_img_root_dir,'T1_2_m.mapping'))
-
+import copy
+MP01_2_try1=copy.deepcopy(MP01_2)
 #%%
 
 del MP01
 MP01=mapping(r'C:\Research\MRI\MP_EPI\saved_ims_v2_Feb_5_2024\CIRC_00488\CIRC_00488_MP01_T1_p.mapping')
 MP02_contour=mapping(r'C:\Research\MRI\MP_EPI\saved_ims_v2_Feb_5_2024\CIRC_00488\CIRC_00488_MP02_T2_p.mapping')
-for obj in [MP01]:
+for obj in [MP01,MP01_2_try1]:
     obj.go_crop_Auto()
     obj.go_resize()
     obj._update()
 #%%
+MP01_2_try1._delete(d=[6,7,-2])
+MP01_2_try1.go_ir_fit(invertPoint=8)
+#%%
+#Crop it a little smaller
+MP02.go_crop()
+cropzone=MP02.cropzone
+Nx,Ny,Nz,_=np.shape(MP02._data)
+data_crop=np.zeros((Nx,Ny,Nz))
+
+for obj in [MP01,MP02_contour,MP03]:
+    obj.cropzone=cropzone
+    obj.go_crop()
+
+    obj._map,_=obj._crop(obj._map,cropzone)
+#%%
 plt.style.use('default')
 
-MP01._map[:,:,2]=np.squeeze(MP01_2try_1._map)
+MP01._map[:,:,2]=np.squeeze(MP01_2_try1._map)
 #img_save_dir=os.path.join(img_root_dir,CIRC_ID)
 img_save_dir=saved_img_root_dir
 %matplotlib inline
@@ -107,18 +121,19 @@ for sl in range(num_slice):
     im = axes[sl].imshow(MP01._map[..., sl], vmin=crange[0], vmax=crange[1], cmap=cmap, alpha=1.0*MP01.mask_lv[...,sl])
 #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=1, pad=0.018, aspect=11)
 if plot:
-    plt.savefig(os.path.join(saved_img_root_dir, f"MP01_Slice2_try{ss}_overlay_maps.png"))
+    plt.savefig(os.path.join(saved_img_root_dir, f"MP01_Slice2_try4_overlay_maps.png"))
 plt.show()  
 plt.close()
 
 MP01.show_calc_stats_LV()
 #MP01_post.show_calc_stats_LV()
-MP01.save(filename=os.path.join(saved_img_root_dir,f'{MP01.CIRC_ID}_{MP01.ID}_p.mapping'))
 
 # %%
 # T2
 #MP03.go_cal_ADC()
 #MP02.go_t2_fit()
+MP01.save(filename=os.path.join(saved_img_root_dir,f'{MP01.CIRC_ID}_{MP01.ID}_p.mapping'))
+
 MP02._update_mask(MP02_contour)
 MP03._update_mask(MP02_contour)
 fig, axes = plt.subplots(nrows=1, ncols=num_slice, figsize=figsize, constrained_layout=True)

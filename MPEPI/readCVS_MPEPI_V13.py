@@ -96,7 +96,7 @@ dirname='C:\Research\MRI\MP_EPI'
 #CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00407','CIRC_00419', 'CIRC_00429','CIRC_00452','CIRC_00446']    
 #df=pd.read_csv(os.path.join(dirname,r'mapping_Jan.csv'))
 #CIRC_ID_list=['CIRC_00291','CIRC_00292','CIRC_00296','CIRC_00302','CIRC_00303']              
-df=pd.read_csv(os.path.join(dirname,r'saved_ims_v2_Feb_5_2024\WITH8000\mapping_Feb.csv'))
+df=pd.read_csv(os.path.join(dirname,r'mapping_April_Reference.csv'))
 CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00419', 'CIRC_00429','CIRC_00446','CIRC_00472','CIRC_00486','CIRC_00498','CIRC_00500']    
 
 #ID_list=['MP01','MP02','MP03','T1-MOLLI','T2-FLASH']
@@ -663,9 +663,54 @@ plt.title('Corrlation of T2')
 plt.legend()
 
 #%%
-
-
-
+all_data_T1[0]=[1320.941,
+1318.174,
+1279.52,
+1306.96,
+1331.634,
+1315.806,
+1293.176,
+1282.266,
+1365.482,
+1410.407,
+1298.22,
+1384.759]
+all_data_T1[1]=[1233.604,
+1311.792,
+1352.875,
+1243.089,
+1273.954332,
+1383.501,
+1404.112,
+1329.318,
+1325.089,
+1303.378,
+1240.556,
+1370.042]
+all_data_T2[1]=[48.18114,
+36.10927,
+50.60482,
+42.8378,
+39.86258,
+46.98803,
+46.23127,
+46.6973,
+41.87035,
+39.61702,
+38.45301,
+41.61876]
+all_data_T2[0]=[39.30335,
+36.11927,
+45.06578,
+38.48822,
+36.40461,
+42.21507,
+42.24263,
+38.984,
+39.82818,
+39.37153,
+39.27604,
+41.66917]
 
 # %%
 #

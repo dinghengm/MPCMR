@@ -7,7 +7,7 @@ import os
 
 import warnings #we know deprecation may show bc we are using a stable older ITK version
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
-path=fr'C:\Research\MRI\MP_EPI\CIRC_00488_22737_CIRC_00488_22737\CIRC_RESEARCH CIRC Research\MR ep2d_diff_Cima_M2_asym_5slices_b500_TE59_FOVphase37.5'
+path=fr'C:\Research\MRI\MP_EPI\CIRC_00595_22737_CIRC_00595_22737\MR ep2d_diff_M2asym'
 dti = diffusion(data=path,ID='Zoomit_3Slice')
 
 #%%
@@ -24,14 +24,14 @@ dti.imshow()
 dti.go_resize(scale=2)
 
 # Motion Correct Data 
-dti.go_moco(method = 'lrt')
+#dti.go_moco(method = 'lrt')
 
 # Calculate DTI 
 # NB: you NEED to run *.go_segment_LV() first to get helix calculation
 dti.go_calc_DTI(bCalcHA=True,bFastOLS=True,bNumba=False)
 
 # custom imshow to show the diffusion parameters
-dti.imshow_diff_params()
+#dti.imshow_diff_params()
 
 # Save Data (by default it will save as dti.path + '/' + dti.ID + ".diff") 
 dti.save()

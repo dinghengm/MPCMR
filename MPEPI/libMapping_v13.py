@@ -282,7 +282,16 @@ class mapping:
         self.Nx = self._data.shape[0]
         self.Ny = self._data.shape[1]
         self.shape = self._data.shape
-        
+        try:
+            self._map,_ =self._crop(self._map)
+            self.mask_lv,_ =self._crop(self.mask_lv)
+            self.mask_endo,_ =self._crop(self.mask_endo)
+            self.mask_epi,_ =self._crop(self.mask_epi)
+            self.mask_lateral,_ =self._crop(self.mask_lateral)
+            self.mask_septal,_ =self._crop(self.mask_septal)
+        except:
+            pass
+        self._update()
     def go_crop_Auto(self,data=None,cropStartVx=32):
         cropData=self._crop_Auto(data=data,cropStartVx=cropStartVx)
         self._data=cropData
@@ -305,7 +314,16 @@ class mapping:
         self.Nx = newshape[0]
         self.Ny = newshape[1]
         self._data = self._resize()
-
+        try:
+            self._map,_ =self._resize(self._map)
+            self.mask_lv,_ =self._resize(self.mask_lv)
+            self.mask_endo,_ =self._resize(self.mask_endo)
+            self.mask_epi,_ =self._resize(self.mask_epi)
+            self.mask_lateral,_ =self._resize(self.mask_lateral)
+            self.mask_septal,_ =self._resize(self.mask_septal)
+        except:
+            pass
+        self._update()
     # motion correct class method
     def go_moco(self, method='lrt', rank_img=10, rank_diff=1, rank_diff_resp=2, N_rbins=6):
         '''
@@ -1022,7 +1040,7 @@ class mapping:
             img_dir= os.path.join(path,f'{ID}')
             if plot:
                 plt.savefig(img_dir,bbox_inches='tight')
-                plt.savefig(img_dir+'.pdf',bbox_inches='tight')
+                #plt.savefig(img_dir+'.pdf',bbox_inches='tight')
         elif len(np.shape(volume))==4:
             Nx,Ny,Nz,Nd=np.shape(volume)
             plt.style.use('dark_background')
@@ -1046,7 +1064,7 @@ class mapping:
             img_dir= os.path.join(path,f'{ID}')
             if plot:
                 plt.savefig(img_dir, bbox_inches='tight')
-                plt.savefig(img_dir+'.pdf',bbox_inches='tight')
+                #plt.savefig(img_dir+'.pdf',bbox_inches='tight')
                 
         return fig,axs
 
@@ -1394,13 +1412,20 @@ class mapping:
                     temp = imcrop(data[:,:,0], cropzone)
                     shape = (temp.shape[0], temp.shape[1], data.shape[2])
         # apply crop
-        data_crop = np.zeros(shape) #use updated shape
+        try:
+            data_crop = np.zeros(shape) #use updated shape
+            
+            Nx,Ny,Nz,Nd=np.shape(data)
+            for z in tqdm(range(Nz)):
+                for d in range(Nd):
+                    data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
+        except:
+            data_crop = np.zeros(shape) #use updated shape
+            
+            Nx,Ny,Nz=np.shape(data)
+            for z in tqdm(range(Nz)):
+                    data_crop[:,:,z] = imcrop(data[:,:,z], cropzone)
         
-        Nx,Ny,Nz,Nd=np.shape(data)
-        for z in tqdm(range(Nz)):
-            for d in range(Nd):
-                data_crop[:,:,z,d] = imcrop(data[:,:,z,d], cropzone)
-
         return data_crop, cropzone    
 
 
@@ -1432,8 +1457,13 @@ class mapping:
             newshape = (self.Nx,self.Ny,self.Nz,self.Nd)
 
         new_data = np.zeros(newshape)
-        for z in tqdm(range(self.Nz)):
-            new_data[:,:,z,:] = imresize(data[:,:,z,:],(newshape[0],newshape[1]))
+        try:
+            for z in tqdm(range(self.Nz)):
+                new_data[:,:,z,:] = imresize(data[:,:,z,:],(newshape[0],newshape[1]))
+        except:
+            for z in tqdm(range(self.Nz)):
+                new_data[:,:,z] = imresize(data[:,:,z],(newshape[0],newshape[1]))
+        
         return new_data
     
     def _update(self):
@@ -1461,7 +1491,14 @@ class mapping:
             self.Ny=Ny
             self.Nz=Nz
             self.Nd=Nd
-
+        try:
+            self.mask_lv=np.int8(self.mask_lv)
+            self.mask_endo=np.int8(self.mask_endo)
+            self.mask_epi=np.int8(self.mask_epi)
+            self.mask_lateral=np.int8(self.mask_lateral)
+            self.mask_septal=np.int8(self.mask_septal)
+        except:
+            pass
     def _update_mask(self,segmented):
         '''
             This function will get the mask from another input

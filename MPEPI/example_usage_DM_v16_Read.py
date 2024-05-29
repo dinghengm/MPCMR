@@ -27,9 +27,9 @@ matplotlib.rcParams['savefig.dpi'] = 400
 #%%
 plot=True
 # %%
-CIRC_ID='CIRC_00457'
+CIRC_ID='CIRC_00599'
 img_root_dir = os.path.join(defaultPath, "saved_ims",CIRC_ID)
-saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Jan_12_2024",CIRC_ID)
+saved_img_root_dir=os.path.join(defaultPath, "saved_ims_v2_Feb_5_2024",CIRC_ID)
 if not os.path.exists(saved_img_root_dir):
             os.mkdir(saved_img_root_dir)
 
@@ -90,6 +90,7 @@ for obj in MP01_list:
 #Get the shape of all data, and then replace the data with corrected
 #Read the data
 #Renew the dataset:
+%matplotlib qt
 for ss,obj_T1 in enumerate(MP01_list):
     key=f'moco_Slice{ss}'
     moco_data_single_slice=np.transpose(moco_data[key],(2,1,0))
@@ -110,14 +111,8 @@ for ss,obj_T1 in enumerate(MP01_list):
             obj._data[:,:,ss,:]=moco_data_single_slice[:,:,Ndtmp_start:Ndtmp_end]
             print(obj.ID,np.shape(moco_data_single_slice[:,:,Ndtmp_start:Ndtmp_end]))
             #print('valueList=',obj.valueList)
-'''
-for obj in MP01_list:
-    obj.go_crop_Auto()
-    obj.go_resize()
-for obj in MPs_list:
-    obj.go_crop_Auto()
-    obj.go_resize()
-'''
+
+
 #%%
 #Replace the between frames with the original frames
 #Conservative in 800-900 only
@@ -128,6 +123,24 @@ for ss,obj_T1 in enumerate(MP01_list):
     obj_T1._data[...,arrayInd]=obj_T1._raw_data[...,arrayInd]
     obj_T1.imshow_corrected(ID=f'MP01_Slice{ss}_1_Cropped_updated',plot=plot,path=saved_img_root_dir)
 
+#%%
+#488 only
+MP01_0._delete(d=[2])
+MP01_1._delete(d=[2,3,5])
+MP01_2._delete(d=[2,3,6,7])
+MP01_0.imshow_corrected(ID=f'MP01_Slice0_2',plot=plot,path=saved_img_root_dir)
+MP01_1.imshow_corrected(ID=f'MP01_Slice1_2',plot=plot,path=saved_img_root_dir)
+MP01_2.imshow_corrected(ID=f'MP01_Slice2_2',plot=plot,path=saved_img_root_dir)
+
+
+
+#%%
+for obj in MP01_list:
+    obj.go_crop_Auto()
+    obj.go_resize()
+for obj in MPs_list:
+    obj.go_crop_Auto()
+    obj.go_resize()
 
 #%%
 #Save the file as M
@@ -171,7 +184,7 @@ for ss,obj_T1 in enumerate(MP01_list):
     finalMap,finalRa,finalRb,finalRes=obj_T1.go_ir_fit(searchtype='grid',invertPoint=4)
     plt.figure()
     plt.axis('off')
-    plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=3000)
+    plt.imshow(finalMap.squeeze(),cmap='magma',vmin=0,vmax=800)
     img_dir= os.path.join(img_root_dir,f'Slice{ss}_T1')
     plt.savefig(img_dir)
     obj_T1._map=finalMap
@@ -258,7 +271,6 @@ for obj in MPs_list:
 
 
 #%%
-
 MP01.export_stats(filename=stats_file,crange=[0,3000])
 MP02.export_stats(filename=stats_file,crange=[0,150])
 MP03.export_stats(filename=stats_file,crange=[0,3])
