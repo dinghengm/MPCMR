@@ -1,6 +1,7 @@
 #%%
-from libMapping_v13 import mapping  # <--- this is all you need to do diffusion processing
-from libMapping_v13 import readFolder,decompose_LRT,moco,moco_naive
+####################Currently I am testing if I could get click on the center of mass and also the edge of 
+####################
+from libMapping_v14 import *  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -38,6 +39,202 @@ map_T2=mapping(mapList[1])
 #dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
 map_DWI=mapping(mapList[2])
+#%%
+#Get the center
+%matplotlib qt
+map_T1.go_define_CoMandRVIns()
+
+#%%
+#Show the center in the first slice
+plt.figure()
+cmap=map_T1.cmap
+crange=map_T1.crange
+plt.imshow(map_T1._map[:,:,0].squeeze(),cmap='gray')
+
+CoMTmp=map_T1.CoM[0]
+aRVIns=map_T1.aRVIns[0]
+iRVIns=map_T1.iRVIns[0]
+#So stupid!!! What the fuck!!!
+# Define points
+anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
+inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
+center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
+
+
+
+plt.plot(*center_of_mass,'ro')
+plt.plot(*inferior_rv_insertion,'ro')
+plt.plot(*anterior_rv_insertion,'ro')
+
+#plt.plot(CoMTmp[1],CoMTmp[0],'ro')
+#plt.plot(aRVIns[1],aRVIns[0],'ro')
+#plt.plot(iRVIns[1],iRVIns[0],'ro')
+#plt.xlim(0,np.shape(map_T1._map)[1])
+#plt.ylim(0,np.shape(map_T1._map)[0])
+plt.show()
+
+#%%
+#Show the insertion of the wheel 
+plt.figure()
+plt.imshow(map_T1.mask_lv[:,:,0].squeeze())
+
+midpoint = (anterior_rv_insertion + inferior_rv_insertion) / 2
+plt.plot(*center_of_mass,'ro')
+plt.plot(*inferior_rv_insertion,'ro')
+plt.plot(*anterior_rv_insertion,'ro')
+#The line not the angle
+plt.plot([center_of_mass[0], anterior_rv_insertion[0]], [center_of_mass[1], anterior_rv_insertion[1]], 'k--')
+plt.plot([center_of_mass[0], inferior_rv_insertion[0]], [center_of_mass[1], inferior_rv_insertion[1]], 'k--')
+plt.plot([center_of_mass[0], midpoint[0]], [center_of_mass[1], midpoint[1]], 'k--')
+
+
+#%%
+# Calculate angles for segment lines
+plt.figure()
+plt.imshow(map_T1.mask_lv[:,:,0].squeeze())
+plt.plot(*center_of_mass,'ro')
+plt.plot(*inferior_rv_insertion,'ro')
+plt.plot(*anterior_rv_insertion,'ro')
+angle1 = np.arctan2(anterior_rv_insertion[1] - center_of_mass[1], anterior_rv_insertion[0] - center_of_mass[0])
+angle2 = np.arctan2(inferior_rv_insertion[1] - center_of_mass[1], inferior_rv_insertion[0] - center_of_mass[0])
+angle3 = (angle1 + angle2) / 2
+
+# Define the six end point for the lines (end point is needed to make sure it covers the whole mask_LV)
+# Also get the CoM
+#Define the 3 lines based on the CoM and each end point
+#First line: bisector
+line_length = 40  # Adjust the length of the line, to make sure it's long enough to cover the mask_LV
+bisector_start= center_of_mass - line_length * np.array([np.cos(angle3), np.sin(angle3)])
+bisector_end = center_of_mass + line_length * np.array([np.cos(angle3), np.sin(angle3)])
+#Second line: the anterior part
+line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
+anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+#Thrid line: the inferior part
+inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+
+plt.plot([bisector_start[0], bisector_end[0]], [bisector_start[1], bisector_end[1]], 'k--')
+plt.plot([anterior_start[0], anterior_end[0]], [anterior_start[1], anterior_end[1]], 'k--')
+plt.plot([inferior_start[0], inferior_end[0]], [inferior_start[1], inferior_end[1]], 'k--')
+
+#%%
+from skimage.draw import polygon2mask
+#Define the first coordinate:
+Nx=map_T1.Nx
+Ny=map_T1.Ny
+coordinates = (bisector_start, center_of_mass, anterior_start) #3 points
+#Sometimes it's reverted
+coordinates = [[y,x] for [x,y] in coordinates]
+polygon = np.array(coordinates)
+mask = polygon2mask([Nx,Ny], polygon)
+plt.figure()
+mask2=np.logical_and(mask,map_T1.mask_lv[:,:,0])
+plt.imshow(mask2)
+plt.show()
+
+
+#%%
+#Find the overlap between three part
+
+mask_lv_nn=map_T1.mask_lv[:,:,0]
+def coordinate2mask(coordinates,mask_lv_nn,Nx,Ny):
+            #for skimage it's reverted
+            coordinates = [[y,x] for [x,y] in coordinates]
+            polygon = np.array(coordinates)
+            #Use the polygon2mask fuction for mask generation
+            mask_tmp = polygon2mask([Nx,Ny], polygon)
+            #Found the overlap between mask_seg and mask_lv_nn
+            mask_seg=np.logical_and (mask_tmp, mask_lv_nn)
+            return mask_seg
+
+coordinates = (inferior_end, center_of_mass, anterior_start)
+mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny) *1
+
+coordinates = (bisector_start, center_of_mass, anterior_start)
+mask_seg2=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*2
+
+coordinates = (bisector_start, center_of_mass, inferior_start)
+mask_seg3=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*3
+
+coordinates = (anterior_end, center_of_mass, inferior_start)
+mask_seg4=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*4
+
+coordinates = (anterior_end, center_of_mass, bisector_end)
+mask_seg5=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*5
+
+coordinates = (inferior_end, center_of_mass, bisector_end)
+mask_seg6=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*6
+
+maskFinal=mask_seg+mask_seg2+mask_seg3+mask_seg4+mask_seg5+mask_seg6
+
+plt.imshow(maskFinal,vmax=6)
+plt.show()
+#%%
+segment_16=[]
+mask_lv_nn=map_T1.mask_lv[:,:,2].squeeze()
+#For the first slice:
+CoMTmp=map_T1.CoM[2]
+aRVIns=map_T1.aRVIns[2]
+iRVIns=map_T1.iRVIns[2]
+# Define points
+#The x and y is reversed from previously 
+anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
+inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
+center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
+
+#Second line: the anterior part
+line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
+anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+#Thrid line: the inferior part
+inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+
+#Number 13 Seg: Anterior 
+coordinates = (inferior_end, center_of_mass, anterior_start)
+mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+segment_16.append(mask_seg)
+
+#Number 14 Seg: Septal 
+coordinates = (inferior_start, center_of_mass, anterior_start)
+mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+segment_16.append(mask_seg)
+
+#Number 15 Seg:  Inferior
+coordinates = (anterior_end, center_of_mass, inferior_start)
+mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+segment_16.append(mask_seg)
+
+#Number 16 Seg:  Lateral
+coordinates = (anterior_end, center_of_mass, inferior_end)
+mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+segment_16.append(mask_seg)
+maskFinal=np.zeros((Nx,Ny),dtype=int)
+for nn,masktmp in enumerate(segment_16):
+    maskFinal+=segment_16[nn] *(nn+1)
+
+plt.imshow(maskFinal,vmax=4)
+plt.show()
+
+#%%
+#Copy the map from T1 T2 and ADC
+map_T1.go_get_AHA_wheel()
+
+map_T2._update_mask(map_T1)
+map_DWI._update_mask(map_T1)
+segment_16=map_T2.segment_16
+maskFinal=np.zeros((Nx,Ny),dtype=int)
+for nn,masktmp in enumerate(segment_16):
+    maskFinal+=segment_16[nn] *(nn+1)
+plt.imshow(maskFinal,vmax=18)
+plt.show()
+
+#%%
+
+
+
+
 #%%
 def imshowMap(obj,path,plot):
     num_slice=obj.Nz

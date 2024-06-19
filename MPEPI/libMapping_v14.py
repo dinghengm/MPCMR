@@ -36,7 +36,6 @@ from pathlib import Path
 from skimage.restoration import (denoise_tv_chambolle, denoise_bilateral,
                                  denoise_wavelet, estimate_sigma)
 import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from tensorly.decomposition import tucker
 import tensorly as tl
@@ -50,7 +49,6 @@ from imgbasics import imcrop #for croping
 from tqdm.auto import tqdm # progress bar
 from ipyfilechooser import FileChooser # ui get file
 import pickle # to save diffusion object
-import fnmatch # this is for string comparison dicomread
 import pandas as pd
 from skimage.transform import resize as imresize
 import re
@@ -58,7 +56,7 @@ import statsmodels.api as sm
 from scipy.optimize import curve_fit
 from scipy.stats import chisquare
 import nibabel as nib
-
+from skimage.draw import polygon2mask
 try:
     from numba import njit #super fast C-like calculation
     _global_bNumba_support = True
@@ -253,8 +251,11 @@ class mapping:
         self.mask_lv = []
         self.mask_septal = []
         self.mask_lateral = []
-        self.CoM = []
+        self.CoM = []      #Center of Mask
+        self.aRVIns =[]    #The anterior RV Insertion Point
+        self.iRVIns=[]     #The interfior RV Insertion Point  
         self.cropzone = []
+        self.segment_16=[]
         print('Data loaded successfully')
 
     # string returned if printed    
@@ -524,7 +525,98 @@ class mapping:
         self._map=self.ADC
         return ADCmap*1000
 
-        
+    #Only support the GRID method currently
+    def go_ir_fit_ROI(self,data=None,mask=None,TIlist=None,searchtype='grid',T1bound=[1,5000],invertPoint=4,sliceNumber=None,simply=False):
+        if data is None:
+            data=self._data
+        if TIlist is None:
+            TIlist=self.valueList
+        try:
+            Nx,Ny,Nd=np.shape(data)
+        except:
+            Nx,Ny,Nz,Nd=np.shape(data)
+        if  mask is None:
+            mask=self.mask_lv
+        elif len(np.shape(mask)) ==2:
+            mask=mask[:,:,np.newaxis]
+    
+        #Now we try to fit withing the mask
+        if len(np.shape(data))==3 or Nz==1:
+            NxNy=int(Nx*Ny)
+            finalMap=np.zeros((Nx*Ny,1))
+            finalRa=np.zeros((Nx*Ny,1))
+            finalRb=np.zeros((Nx*Ny,1))
+            finalIndex=np.zeros((Nx*Ny,1),dtype=int)
+            finalRes=np.zeros((Nx*Ny,1))
+        elif len(np.shape(data))==4:
+            Nx,Ny,Nz,Nd=np.shape(data)
+            finalMap=np.zeros((Nx*Ny,Nz))
+            finalRa=np.zeros((Nx*Ny,Nz))
+            finalRb=np.zeros((Nx*Ny,Nz))
+            finalIndex=np.zeros((Nx*Ny,Nz),dtype=int)
+            finalRes=np.zeros((Nx*Ny,Nz))
+            NxNy=int(Nx*Ny)
+
+        #only calculate in slice with index:
+        dataTmp=np.reshape(data,(NxNy,Nz,Nd))
+        dataNotROITmp=np.reshape(data,(NxNy,Nz,Nd))
+        for z in range(Nz):
+            tmpmask=mask[:,:,z].reshape(NxNy)
+            for nn in range(NxNy):
+                if tmpmask[nn] == True:
+                    _,_,_,finalIndex[nn,z],finalRes[nn,z]=ir_fit(dataTmp[nn,z],TIlist=TIlist,searchtype=searchtype,T1bound=T1bound,invertPoint=invertPoint)
+        #Finally we get the finalIndex:
+        #And we calculate the map one more time:
+        finalIndexSingleSliceList=[]
+        for z in range(Nz):
+            #finalIndex[mask[:,:,z]==1]=0
+            #The name of count
+            u, count = np.unique(finalIndex, return_counts=True)
+            #print(np.unique(finalIndex, return_counts=True))
+            count_sort_ind = np.argsort(-count)
+            ##counts = np.bincount(np.reshape(finalIndex[:,:,z],-1))
+            #finalIndexSingleSlice=np.argmax(counts)
+            #u[count_sort_ind] is the sorted values in the list
+            #We need to drop the 0 as this is not in the mask
+            if u[count_sort_ind][0]==0:
+                finalIndexSingleSlice=u[count_sort_ind][1]
+            else:
+                finalIndexSingleSlice=u[count_sort_ind][0]
+            print(f'Index is',finalIndexSingleSlice)
+            finalIndexSingleSliceList.append(finalIndexSingleSlice)
+            try:
+                minIndTmp=finalIndexSingleSlice
+                invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
+                #dataTmp=np.reshape(data,(NxNy,Nz,Nd))
+                dataTmp=dataTmp*invertMatrix.T
+            except:
+                continue
+
+            for nn in range(NxNy):
+                if simply==True:
+                    if tmpmask[nn] == True:
+                        finalMap[nn,z],finalRa[nn,z],finalRb[nn,z],finalRes[nn,z],_=sub_ir_fit_grid(data=dataTmp[nn,z],TIlist=TIlist,T1bound=T1bound)
+                else:
+                    if tmpmask[nn] == True:
+                        finalMap[nn,z],finalRa[nn,z],finalRb[nn,z],finalRes[nn,z],_=sub_ir_fit_grid(data=dataTmp[nn,z],TIlist=TIlist,T1bound=T1bound)
+                    else:
+                        finalMap[nn,z],_,_,_,finalRes[nn,z]=ir_fit(dataNotROITmp[nn,z],TIlist=TIlist,searchtype=searchtype,T1bound=T1bound,invertPoint=invertPoint)
+                '''
+                tmpmask=mask[:,:,z].reshape(NxNy)
+                if tmpmask[nn] == True:
+                    finalMap[nn,z],finalRa[nn,z],finalRb[nn,z],finalRes[nn,z],_=sub_ir_fit_grid(data=dataTmp[nn,z],TIlist=TIlist,T1bound=T1bound)
+                else:
+                    if simply !=True:
+                        finalMap[nn,z],_,_,_,finalRes[nn,z]=ir_fit(dataNotROITmp[nn,z],TIlist=TIlist,searchtype=searchtype,T1bound=T1bound,invertPoint=invertPoint)
+                '''
+        self._map=finalMap.reshape(Nx,Ny,Nz)
+        self._error=finalRes.reshape(Nx,Ny,Nz)
+        self._finalIndexList=finalIndexSingleSliceList
+        self._finalRa=finalRa.reshape(Nx,Ny,Nz)
+        self._finalRb=finalRb.reshape(Nx,Ny,Nz)
+        return finalMap.reshape(Nx,Ny,Nz),finalRa.reshape(Nx,Ny,Nz),finalRb.reshape(Nx,Ny,Nz),finalRes.reshape(Nx,Ny,Nz),finalIndexSingleSliceList  
+
+
     #Only work in size 1, please write for loop if you want it to be in multiple slice
     def go_ir_fit(self,data=None,TIlist=None,ra=1,rb=-2,T1=1200,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4):
         if data is None:
@@ -551,9 +643,9 @@ class mapping:
         #Calculate all slices
         dataTmp=np.copy(data)
         for z in tqdm(range(Nz)):
-            
             for x in range(Nx):
                 for y in range(Ny):
+                    
                     finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
                 T1bound=T1bound,invertPoint=invertPoint)
         self._map=finalMap
@@ -635,6 +727,8 @@ class mapping:
             self.mask_septal = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
             self.mask_lateral = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
             self.CoM = [None]*self.Nz
+            self.aRVIns=[None]*self.Nz
+            self.iRVIns=[None]*self.Nz
             slices = range(self.Nz)
             if reject != None:
                 slices = np.delete(slices, reject)
@@ -722,6 +816,180 @@ class mapping:
 
         print(f'Create GIF in {img_dir}')
 
+    #Go_define_CoM and RV insertion
+    def go_define_CoMandRVIns(self):
+        '''
+        Double click to define the COM for each slice
+        '''
+        print('Define CoM for quick HA estimate')
+        roi_names_list=['Center_of_Mass', 'anterior_RV_insertion', 'inferior_RV_insertion']
+        self.CoM = [None]*self.Nz
+        self.aRVIns=[None]*self.Nz
+        self.iRVIns=[None]*self.Nz
+        for z in range(self.Nz):
+            try:
+                image = self._map[:,:,z]
+                cmap=self.cmap
+                crange=self.crange
+            except:
+                image = self._data[:,:,z,0] #self._data[:,:,z,0] #np.random.randint(0,255,(255,255))
+                cmap='gray'
+                crange=[0,np.max(image)*0.6]
+
+            
+            fig = plt.figure()
+            plt.imshow(image, cmap=cmap,vmin=crange[0],vmax=crange[1])
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            plt.title('Slice '+ str(z) + ", Double Click Center")
+            roi_CoM = RoiPoly(fig=fig, color='r')
+            self.CoM[z] = np.array([np.mean(roi_CoM.y), np.mean(roi_CoM.x)])
+
+            fig = plt.figure()
+            plt.imshow(image, cmap=cmap,vmin=crange[0],vmax=crange[1])
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            plt.title('Slice '+ str(z) + ", Double Click Anterior RV Insertion")
+            roi_aRVIns = RoiPoly(fig=fig, color='r')
+            self.aRVIns[z] = np.array([np.mean(roi_aRVIns.y), np.mean(roi_aRVIns.x)])
+
+
+            fig = plt.figure()
+            plt.imshow(image, cmap=cmap,vmin=crange[0],vmax=crange[1])
+            fig.canvas.manager.set_window_title('Slice '+ str(z))
+            plt.title('Slice '+ str(z) + ", Double Click Inferior RV Insertion")
+            roi_iRVIns = RoiPoly(fig=fig, color='r')
+            self.iRVIns[z] = np.array([np.mean(roi_iRVIns.y), np.mean(roi_iRVIns.x)])
+
+
+    
+    #Here are the steps to get the AHA wheel
+    #Only support 3 slices currently
+    def go_get_AHA_wheel(self):
+        #Please review the setup from https://github.com/hemanth-kumarv/bulls-eye-view-for-scar-tissues/tree/master
+        #and https://github.com/MaciejPMarciniak/SmoothAHAplot
+        #Support multiple points (more then 3)
+        def coordinate2mask(coordinates,mask_lv_nn,Nx,Ny):
+            #for skimage it's reverted
+            coordinates = [[y,x] for [x,y] in coordinates]
+            polygon = np.array(coordinates)
+            #Use the polygon2mask fuction for mask generation
+            mask_tmp = polygon2mask([Nx,Ny], polygon)
+            #Found the overlap between mask_seg and mask_lv_nn
+            mask_seg=np.logical_and (mask_tmp, mask_lv_nn)
+            return mask_seg
+        
+        Nx = self.Nx
+        Ny = self.Ny
+
+        if self.Nz ==1:
+            return('Error, Only support 3 slice now')
+
+        segment_16=[]
+        for nn in range(self.Nz-1):
+            #masklv for single slice
+            mask_lv_nn=self.mask_lv[:,:,nn].squeeze()
+            #For the first slice:
+            CoMTmp=self.CoM[nn]
+            aRVIns=self.aRVIns[nn]
+            iRVIns=self.iRVIns[nn]
+            # Define points
+            #The x and y is reversed from previously 
+            anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
+            inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
+            center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
+
+            #Get the midpoint of anterior and inferior
+            #Get the angle of the anterior and inferior for further implementation
+            #This is used for bisector start point calculation: 
+            angle1 = np.arctan2(anterior_rv_insertion[1] - center_of_mass[1], anterior_rv_insertion[0] - center_of_mass[0])
+            angle2 = np.arctan2(inferior_rv_insertion[1] - center_of_mass[1], inferior_rv_insertion[0] - center_of_mass[0])
+            angle3 = (angle1 + angle2) / 2       
+
+            # Define the six end point for the lines (end point is needed to make sure it covers the whole mask_LV)
+            #First line: bisector
+            line_length = 40  # Adjust the length of the line, to make sure it's long enough to cover the mask_LV
+            bisector_start= center_of_mass - line_length * np.array([np.cos(angle3), np.sin(angle3)])
+            bisector_end = center_of_mass + line_length * np.array([np.cos(angle3), np.sin(angle3)])
+
+            #Second line: the anterior part
+            line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
+            anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+            anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+            #Thrid line: the inferior part
+            inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+            inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+
+            #Number 1 Seg: Anterior 
+            coordinates = (inferior_end, center_of_mass, anterior_start)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+            #Number 2 Seg: Anteriorseptal 
+            coordinates = (bisector_start, center_of_mass, anterior_start)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+            #Number 3 Seg:  Inferiorseptal 
+            coordinates = (bisector_start, center_of_mass, inferior_start)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+            #Number 4 Seg:  Inferior
+            coordinates = (anterior_end, center_of_mass, inferior_start)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+            #Number 5 Seg:  inferiorlateral
+            coordinates = (anterior_end, center_of_mass, bisector_end)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+            #Number 6 Seg:  anteriallateral
+            coordinates = (inferior_end, center_of_mass, bisector_end)
+            mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+            segment_16.append(mask_seg)
+
+        #For the last slice: apical slice:
+        #Only 2 segments
+        mask_lv_nn=self.mask_lv[:,:,2].squeeze()
+        #For the first slice:
+        CoMTmp=self.CoM[2]
+        aRVIns=self.aRVIns[2]
+        iRVIns=self.iRVIns[2]
+        # Define points
+        #The x and y is reversed from previously 
+        anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
+        inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
+        center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
+
+        #Second line: the anterior part
+        line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
+        anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+        anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+        #Thrid line: the inferior part
+        inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+        inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+
+        #Number 13 Seg: Anterior 
+        coordinates = (inferior_end, center_of_mass, anterior_start)
+        mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+        segment_16.append(mask_seg)
+
+        #Number 14 Seg: Septal 
+        coordinates = (inferior_start, center_of_mass, anterior_start)
+        mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+        segment_16.append(mask_seg)
+
+        #Number 15 Seg:  Inferior
+        coordinates = (anterior_end, center_of_mass, inferior_start)
+        mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+        segment_16.append(mask_seg)
+
+        #Number 16 Seg:  Lateral
+        coordinates = (anterior_end, center_of_mass, inferior_end)
+        mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
+        segment_16.append(mask_seg)
+
+        self.segment_16=segment_16
 
 
 
@@ -1497,6 +1765,9 @@ class mapping:
             self.mask_epi=np.int8(self.mask_epi)
             self.mask_lateral=np.int8(self.mask_lateral)
             self.mask_septal=np.int8(self.mask_septal)
+            self.CoM=np.int8(self.CoM)
+            self.aRVIns=np.int8(self.aRVIns)
+            self.iRVIns=np.int8(self.iRVIns)
         except:
             pass
     def _update_mask(self,segmented):
@@ -1506,10 +1777,15 @@ class mapping:
                 Segemented: Please input .diffusion or .mapping
         
         '''
-        self.CoM=np.copy(segmented.CoM)
+        import copy 
+
         self.mask_lv=np.copy(segmented.mask_lv)
         self.mask_endo=np.copy(segmented.mask_endo)
         self.mask_epi=np.copy(segmented.mask_epi)
+        self.CoM=copy.deepcopy(segmented.CoM)
+        self.aRVIns=copy.deepcopy(segmented.aRVIns)
+        self.iRVIns=copy.deepcopy(segmented.iRVIns)
+        self.segment_16=copy.deepcopy(segmented.segment_16)
         try:
             self.mask_septal=np.copy(segmented.mask_septal)
             self.mask_lateral=np.copy(segmented.mask_lateral)
@@ -1551,18 +1827,19 @@ class mapping:
         '''
         #Only for T1 LIST ONLY
         data_temp=np.delete(self._data,d,axis=axis)
-        data_temp_raw=np.delete(self._raw_data,d,axis=axis)
         list=np.delete(self.valueList,d).tolist()
         self.valueList=list
-        self._raw_data=data_temp_raw
         self._data=data_temp
         self._update()
+        try:
+            data_temp_raw=np.delete(self._raw_data,d,axis=axis)
+            self._raw_data=data_temp_raw
+        except:
+            return
     
     def _save_nib(self,data=None,path=None,ID=None):
         '''
             This function save the data as .nii file
-        
-        
         '''
         if path ==None:
             path=os.path.dirname(path)
@@ -1643,6 +1920,8 @@ class mapping:
         
         print(' ')
         return data_reg
+
+        
     def _coregister_elastix_return_transform(self, data=None, orig_data=None, target_index=0, regMethod="affine", #"rigid", 
                                 metric="AdvancedMattesMutualInformation", 
                                 interpolator='BSplineInterpolator', 
@@ -1904,13 +2183,16 @@ def calctensor(data, b_matrix, bFastOLS=False):
 #TODO      
 #Make a weighted least square fit
 #Equation: abs(ra+rb *exp(-TI/T1))
+
 def ir_recovery(tVec,T1,ra,rb):
     #Equation: abs(ra+rb *exp(-tVec(TI)/T1))
     tVec=np.array(tVec)
     #Return T1Vec,ra,rb
     return ra + rb* np.exp(-tVec/T1)
+
 def chisquareTest(obs,exp):
     return np.sum(((abs(obs)-abs(exp))**2/abs(exp)))
+
 def sub_ir_fit_lm(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2):
     data_ori=data
     if type=='WLS':
@@ -1972,7 +2254,6 @@ def sub_ir_fit_grid(data=None,TIlist=None,T1bound=[1,5000]):
 
     return T1_exp,ra_exp,rb_exp,res,ydata_exp
 
-
 def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Niter=2,searchtype='grid',
             T1bound=[1,5000],invertPoint=4):
     aEstTmps=[]
@@ -1994,10 +2275,9 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
         iterNum=0,2
     else:
         iterNum=1-int(invertPoint/2),1+int(invertPoint/2)+1
-    iterNumList=range(iterNum[0],iterNum[1],1)
-    for ii in iterNumList:
+    iterNumList=minInd+range(iterNum[0],iterNum[1],1)
+    for minIndTmp in iterNumList:
         try:
-            minIndTmp=minInd+int(ii)
             invertMatrix=np.concatenate((-np.ones(minIndTmp),np.ones(len(TIlist)-minIndTmp)),axis=0)
             dataTmp=data*invertMatrix.T
             minIndTmps.append(minIndTmp)
@@ -2033,47 +2313,10 @@ def ir_fit(data=None,TIlist=None,ra=500,rb=-1000,T1=600,type='WLS',error='l2',Ni
     ra_final=aEstTmps[returnii]
     rb_final=bEstTmps[returnii]
     #ydata_exp=ir_recovery(TIlist,T1,ra,rb)
-    return T1_final,ra_final,rb_final,resTmps,resTmps[returnInd]
+    return T1_final,ra_final,rb_final,returnInd,resTmps[returnii]
 
 
 
-
-def go_ir_fit_parrllel(data=None,TIlist=None,ra=1,rb=-2,T1=1200,parallel=False,type='WLS',Niter=2,error='l2',searchtype='grid',T1bound=[1,5000],invertPoint=4,core=5):
-    ##This is the function to run go ir fit in parallel. But the computer has issue in CPU, might try naive way instead.
-
-    from multiprocessing import Pool
-    from functools import partial
-    try:
-        Nx,Ny,Nd=np.shape(data)
-    except:
-        Nx,Ny,Nz,Nd=np.shape(data)
-    if len(np.shape(data))==3 or Nz==1:
-        NxNyNz=int(Nx*Ny*1)
-        finalMap=np.zeros((Nx*Ny*1))
-        finalRa=np.zeros((Nx*Ny*1))
-        finalRb=np.zeros((Nx*Ny*1))
-        finalRes=np.zeros((Nx*Ny*1))
-    elif len(np.shape(data))==4:
-        Nx,Ny,Nz,Nd=np.shape(data)
-        finalMap=np.zeros((Nx*Ny*Nz))
-        finalRa=np.zeros((Nx*Ny*Nz))
-        finalRb=np.zeros((Nx*Ny*Nz))
-        finalRes=np.zeros((Nx*Ny*Nz))
-        NxNyNz=int(Nx*Ny*Nz)
-    partial_process_slice = partial(ir_fit, data, TIlist, ra, rb, T1, type, error, Niter, searchtype, T1bound,invertPoint)
-    dataTmp=np.reshape(data,(NxNyNz,Nd))
-    pool=Pool(processes=int(os.cpu_count()/2))
-    results = pool.map(partial_process_slice, range(NxNyNz))
-    # Close the pool of worker processes
-    pool.close()
-    pool.join()
-    for p in range(NxNyNz):
-        result=pool.apply_async()
-        finalMap[p],finalRa[p],finalRb[p],Res,_=results[p]
-    T1Map=np.reshape(finalMap,(Nx,Ny,Nz))
-    RaMap=np.reshape(finalRa,(Nx,Ny,Nz))
-    RbMap=np.reshape(finalRb,(Nx,Ny,Nz))
-    return T1Map,RaMap,RbMap,Res
 
 #Define the T2 recovery
 def T2_recovery(tVec,T2,M0):
