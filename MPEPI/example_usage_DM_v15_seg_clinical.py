@@ -87,10 +87,12 @@ def testing_reseg(obj):
 #%%
 #CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
 CIRC_ID_List=[446,452,429,419,405,398,382,381,373,457,472,486,498,500]
-CIRC_NUMBER=CIRC_ID_List[-5]
+CIRC_NUMBER=CIRC_ID_List[8]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
-img_save_dir=os.path.join(img_root_dir,CIRC_ID)
+#img_save_dir=os.path.join(img_root_dir,CIRC_ID)
+img_save_dir = os.path.join(defaultPath, "saved_ims_v2_Dec_14_2023")
+
 if not os.path.exists(img_save_dir):
     os.makedirs(img_save_dir) 
 
@@ -99,15 +101,15 @@ dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
 data_path=os.path.dirname(dicomPath)
 T1_bssfp,_,_  = readFolder(os.path.join(data_path,r'MR t1map_long_t1_3slice_8mm_150_gap_MOCO_T1-2'))
 
-T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_MOCO_T2-2'))
+T2_bssfp,_,_=readFolder(os.path.join(data_path,r'MR t2map_flash_3slice_8mm_150_gap_MOCO_T2'))
 
 #%%
 from imgbasics import imcrop
 from skimage.transform import resize as imresize
 %matplotlib qt
 
-data=T2_bssfp_fb.squeeze()
-map=mapping(data=np.expand_dims(data,axis=-1),ID='T2_FLASH_FB',CIRC_ID=CIRC_ID)
+data=T2_bssfp.squeeze()
+map=mapping(data=np.expand_dims(data,axis=-1),ID='T2_FLASH',CIRC_ID=CIRC_ID)
 
 map.shape=np.shape(map._data)
 map.go_crop()
@@ -129,8 +131,8 @@ cropzone=map.cropzone
 #map.shape=np.shape(map._data)
 #cropzone=map.cropzone
 
-#data=T1_bssfp.squeeze()
-#map=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI',CIRC_ID=CIRC_ID)
+data=T1_bssfp.squeeze()
+map=mapping(data=np.expand_dims(data,axis=-1),ID='T1_MOLLI',CIRC_ID=CIRC_ID)
 
 #%%
 map.cropzone=cropzone
@@ -205,11 +207,11 @@ plt.show()
 
 
 map.show_calc_stats_LV()
-map.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Dec.csv',crange=crange)
-map.save(filename=os.path.join(img_root_dir,f'{map.CIRC_ID}_{map.ID}_p.mapping'))
+#map.export_stats(filename=r'C:\Research\MRI\MP_EPI\mapping_Dec.csv',crange=crange)
+map.save(filename=os.path.join(img_save_dir,f'{map.CIRC_ID}_{map.ID}_p.mapping'))
 print('Saved the segmentation sucessfully')
 #Save again
-map.save()
+#map.save()
 print('Saved the segmentation sucessfully')
 map.imshow_overlay(path=img_save_dir)
 

@@ -15,7 +15,8 @@ defaultPath= r'C:\Research\MRI\MP_EPI'
 #%%
 ###Hey this won't work with disease!!!
 CIRC_ID_List=[446,452,429,419,398,382,381,373,472,498,500]
-CIRC_NUMBER=446
+#CIRC_NUMBER=446
+CIRC_NUMBER=CIRC_ID_List[0]
 CIRC_ID=f'CIRC_00{int(CIRC_NUMBER)}'
 print(f'Running{CIRC_ID}')
 img_root_dir = os.path.join(defaultPath, "saved_ims_v2_Feb_5_2024","WITH8000",CIRC_ID)

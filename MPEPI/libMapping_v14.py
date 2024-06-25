@@ -726,9 +726,7 @@ class mapping:
             self.mask_lv = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
             self.mask_septal = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
             self.mask_lateral = np.full((data).shape[:3], False, dtype=bool) #[None]*self.Nz
-            self.CoM = [None]*self.Nz
-            self.aRVIns=[None]*self.Nz
-            self.iRVIns=[None]*self.Nz
+
             slices = range(self.Nz)
             if reject != None:
                 slices = np.delete(slices, reject)
@@ -817,16 +815,25 @@ class mapping:
         print(f'Create GIF in {img_dir}')
 
     #Go_define_CoM and RV insertion
-    def go_define_CoMandRVIns(self):
+    def go_define_CoMandRVIns(self,z=-1):
         '''
         Double click to define the COM for each slice
         '''
         print('Define CoM for quick HA estimate')
         roi_names_list=['Center_of_Mass', 'anterior_RV_insertion', 'inferior_RV_insertion']
-        self.CoM = [None]*self.Nz
-        self.aRVIns=[None]*self.Nz
-        self.iRVIns=[None]*self.Nz
-        for z in range(self.Nz):
+        if z == -1: #new ROI
+            self.CoM = [None]*self.Nz
+            self.aRVIns=[None]*self.Nz
+            self.iRVIns=[None]*self.Nz
+            slices = range(self.Nz)
+        else: # modify a specific slice for ROI
+            if type(z) == int:
+                slices = [z]
+            else:
+                slices = np.copy(z)
+
+
+        for z in slices:
             try:
                 image = self._map[:,:,z]
                 cmap=self.cmap
@@ -858,18 +865,81 @@ class mapping:
             plt.title('Slice '+ str(z) + ", Double Click Inferior RV Insertion")
             roi_iRVIns = RoiPoly(fig=fig, color='r')
             self.iRVIns[z] = np.array([np.mean(roi_iRVIns.y), np.mean(roi_iRVIns.x)])
+    def go_AHA_wheel_check(self):
+        plt.figure(figsize=(3.4*self.Nz,3))
 
+        for nn in range(self.Nz):
+            crange=self.crange
+            sliceToShow=nn
+            CoMTmp=self.CoM[sliceToShow]
+            aRVIns=self.aRVIns[sliceToShow]
+            iRVIns=self.iRVIns[sliceToShow]
+            #So stupid!!! What the fuck!!!
+            # Define points
+            anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
+            inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
+            center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
+            # Calculate angles for segment lines
+            plt.subplot(1,self.Nz,nn+1)
+            plt.imshow(self.mask_lv[:,:,sliceToShow].squeeze())
+            plt.plot(*center_of_mass,'ro')
+            plt.plot(*inferior_rv_insertion,'ro')
+            plt.plot(*anterior_rv_insertion,'ro')
+            angle1 = np.arctan2(anterior_rv_insertion[1] - center_of_mass[1], anterior_rv_insertion[0] - center_of_mass[0])
+            angle2 = np.arctan2(inferior_rv_insertion[1] - center_of_mass[1], inferior_rv_insertion[0] - center_of_mass[0])
+            angle3 = (angle1 + angle2) / 2
 
+            # Define the six end point for the lines (end point is needed to make sure it covers the whole mask_LV)
+            # Also get the CoM
+            #Define the 3 lines based on the CoM and each end point
+            #First line: bisector
+            line_length = 60  # Adjust the length of the line, to make sure it's long enough to cover the mask_LV
+            bisector_start= center_of_mass - line_length * np.array([np.cos(angle3), np.sin(angle3)])
+            bisector_end = center_of_mass + line_length * np.array([np.cos(angle3), np.sin(angle3)])
+            #Second line: the anterior part
+            line_scale=3   #Random value to make sure it's long enough to cover the Mask_LV
+            anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+            anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+            #Thrid line: the inferior part
+            inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+            inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+
+            plt.plot([bisector_start[0], bisector_end[0]], [bisector_start[1], bisector_end[1]], 'k--')
+            plt.plot([anterior_start[0], anterior_end[0]], [anterior_start[1], anterior_end[1]], 'k--')
+            plt.plot([inferior_start[0], inferior_end[0]], [inferior_start[1], inferior_end[1]], 'k--')
+            if nn==2:
+                plt.subplot(1,self.Nz,nn+1)
+                plt.imshow(self.mask_lv[:,:,sliceToShow].squeeze())
+                plt.plot(*center_of_mass,'ro')
+                plt.plot(*inferior_rv_insertion,'ro')
+                plt.plot(*anterior_rv_insertion,'ro')
+                #First line: the anterior part
+                line_scale=3   #Random value to make sure it's long enough to cover the Mask_LV
+                anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
+                anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
+                #Second line: the inferior part
+                inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
+                inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
+                plt.plot([anterior_start[0], anterior_end[0]], [anterior_start[1], anterior_end[1]], 'k--')
+                plt.plot([inferior_start[0], inferior_end[0]], [inferior_start[1], inferior_end[1]], 'k--')
+            
+            
     
     #Here are the steps to get the AHA wheel
     #Only support 3 slices currently
+    #The segment16 is a list with 3 items: 3 segment_tmp, each segment_tmp is a list with [6,6,4] items
     def go_get_AHA_wheel(self):
         #Please review the setup from https://github.com/hemanth-kumarv/bulls-eye-view-for-scar-tissues/tree/master
         #and https://github.com/MaciejPMarciniak/SmoothAHAplot
         #Support multiple points (more then 3)
         def coordinate2mask(coordinates,mask_lv_nn,Nx,Ny):
             #for skimage it's reverted
-            coordinates = [[y,x] for [x,y] in coordinates]
+            #Make sure coordinates are bigger than 0
+            def set_to_zero_if_negative(points):
+                return np.maximum(points, 0)
+            
+            coordinates = [[set_to_zero_if_negative(y),set_to_zero_if_negative(x)] for [x,y] in coordinates]
+            #coordinates =[[y,x] for [x,y] in coordinates]
             polygon = np.array(coordinates)
             #Use the polygon2mask fuction for mask generation
             mask_tmp = polygon2mask([Nx,Ny], polygon)
@@ -877,14 +947,16 @@ class mapping:
             mask_seg=np.logical_and (mask_tmp, mask_lv_nn)
             return mask_seg
         
-        Nx = self.Nx
-        Ny = self.Ny
+        Nx=np.shape(self._map)[0]
+        Ny=np.shape(self._map)[1]
+
 
         if self.Nz ==1:
             return('Error, Only support 3 slice now')
 
         segment_16=[]
         for nn in range(self.Nz-1):
+            segment_tmp=[]
             #masklv for single slice
             mask_lv_nn=self.mask_lv[:,:,nn].squeeze()
             #For the first slice:
@@ -911,7 +983,7 @@ class mapping:
             bisector_end = center_of_mass + line_length * np.array([np.cos(angle3), np.sin(angle3)])
 
             #Second line: the anterior part
-            line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
+            line_scale=1.8   #Random value to make sure it's long enough to cover the Mask_LV
             anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
             anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
             #Thrid line: the inferior part
@@ -921,33 +993,36 @@ class mapping:
             #Number 1 Seg: Anterior 
             coordinates = (inferior_end, center_of_mass, anterior_start)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
             #Number 2 Seg: Anteriorseptal 
             coordinates = (bisector_start, center_of_mass, anterior_start)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
             #Number 3 Seg:  Inferiorseptal 
             coordinates = (bisector_start, center_of_mass, inferior_start)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
             #Number 4 Seg:  Inferior
             coordinates = (anterior_end, center_of_mass, inferior_start)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
             #Number 5 Seg:  inferiorlateral
             coordinates = (anterior_end, center_of_mass, bisector_end)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
             #Number 6 Seg:  anteriallateral
             coordinates = (inferior_end, center_of_mass, bisector_end)
             mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-            segment_16.append(mask_seg)
+            segment_tmp.append(mask_seg)
 
+            segment_16.append(segment_tmp)
+
+        segment_tmp=[]
         #For the last slice: apical slice:
         #Only 2 segments
         mask_lv_nn=self.mask_lv[:,:,2].squeeze()
@@ -972,22 +1047,24 @@ class mapping:
         #Number 13 Seg: Anterior 
         coordinates = (inferior_end, center_of_mass, anterior_start)
         mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-        segment_16.append(mask_seg)
+        segment_tmp.append(mask_seg)
 
         #Number 14 Seg: Septal 
         coordinates = (inferior_start, center_of_mass, anterior_start)
         mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-        segment_16.append(mask_seg)
+        segment_tmp.append(mask_seg)
 
         #Number 15 Seg:  Inferior
         coordinates = (anterior_end, center_of_mass, inferior_start)
         mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-        segment_16.append(mask_seg)
+        segment_tmp.append(mask_seg)
 
         #Number 16 Seg:  Lateral
         coordinates = (anterior_end, center_of_mass, inferior_end)
         mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-        segment_16.append(mask_seg)
+        segment_tmp.append(mask_seg)
+
+        segment_16.append(segment_tmp)
 
         self.segment_16=segment_16
 
@@ -1060,7 +1137,7 @@ class mapping:
                 filename=os.path.join(path, ID) + '.csv'
             if crange == None:
                 crange=self.crange
-            self._map=self._map.clip(crange[0], crange[1])
+            #self._map=self._map.clip(crange[0], crange[1])
             keys=['CIRC_ID','ID']
             stats=[CIRC_ID,ID]
             for z in range(self.Nz):
@@ -1103,7 +1180,40 @@ class mapping:
             stats.extend(slice_stats)
             keys.extend(slice_keys)
 
+            #Add AHA WHEEL
+            try:
+                segmentValueAveList=[]
+                segmentValueStdList=[]
+                segment_16=self.segment_16
 
+                keys_aha=['Basal Anterior', 'Basal Anteroseptal', 'Basal Inferoseptal',
+               'Basal Inferior', 'Basal Inferolateral', 'Basal Anterolateral',
+               'Mid Anterior', 'Mid Anteroseptal', 'Mid Inferoseptal',
+               'Mid Inferior', 'Mid Inferolateral', 'Mid Anterolateral',
+               'Apical Anterior', 'Apical Septal', 
+               'Apical Inferior', 'Apical Lateral']
+
+                keys_aha_std=[str(f'{tmp} std') for tmp in keys_aha]
+                for nn,segment_stack in enumerate(segment_16):
+                        #Loop over values in each slice [6, 6, 4]
+
+                    for segment in segment_stack:
+                        #mask=map_T1.mask_lv[:,:,nn].squeeze()
+                        map=self._map[:,:,nn].squeeze()
+                        segmentValueAveList.append(np.mean(map[segment]))
+                        segmentValueStdList.append(np.std(map[segment]))
+            
+                stats.extend(segmentValueAveList)
+                keys.extend(keys_aha)
+
+                stats.extend(segmentValueStdList)
+                keys.extend(keys_aha_std)
+
+            
+            except:
+                print('No AHA wheel, Please define the CoM, aRVIns, and iRVIns')
+            
+            
             data=dict(zip(keys,stats))
             self.dti_stats = pd.DataFrame(data, index=[0])
                 
@@ -1116,6 +1226,9 @@ class mapping:
         
         except:
             print('Failed export!!!')
+
+
+        
 
 
     # read in dicoms
@@ -1555,6 +1668,10 @@ class mapping:
         img_dir= os.path.join(path,f'{ID}_overlay')
         if plot:
             plt.savefig(img_dir)
+
+
+    # Imshow the AHA wheel
+    
 
 # ========================================================================================================
 # "PRIVATE" CLASS FUNCTIONS ==============================================================================

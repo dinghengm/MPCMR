@@ -4,7 +4,7 @@
 from libMapping_v14 import *  # <--- this is all you need to do diffusion processing
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+import os,sys
 import SimpleITK as sitk # conda pip install SimpleITK-SimpleElastix
 import scipy.io as sio
 from tqdm.auto import tqdm # progress bar
@@ -20,13 +20,17 @@ import matplotlib
 from CIRC_tools import *
 matplotlib.rcParams['savefig.dpi'] = 400
 plot=False
+
 #%%
-CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
+#CIRC_ID_List=['446','452','429','419','407','405','398','382','381','373']
 #CIRC_NUMBER=CIRC_ID_List[9]
-CIRC_NUMBER=CIRC_ID_List[0]
+CIRC_ID_List=['500','498','472','446','452','429','419','398','382','381','373']
+CIRC_NUMBER=CIRC_ID_List[2]
 CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
 print(f'Running{CIRC_ID}')
-img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
+img_root_dir = os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000",CIRC_ID)
+
+#img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
 mapList=[]
 for dirpath,dirs,files in  os.walk(img_root_dir):
     for x in files:
@@ -40,195 +44,357 @@ map_T2=mapping(mapList[1])
 #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
 map_DWI=mapping(mapList[2])
 #%%
-#Get the center
+def bullsEye(valuesPlot,valuesOri):
+    from PIL import Image, ImageDraw
+    #base_image = Image.new("RGB", (500, 500), (255, 255, 255))
+    #canvas = Image.new("RGB", (500, 500), (255, 255, 255))
+    canvas = Image.new('L', (500,500), (0))
+    draw = ImageDraw.Draw(canvas)
+    draw.arc([100, 100, 400, 400], 0, 60, fill=int(valuesPlot[4]), width=40)
+    draw.arc([100, 100, 400, 400], 60, 120, fill=int(valuesPlot[3]), width=40)
+    draw.arc([100, 100, 400, 400], 120, 180, fill=int(valuesPlot[2]), width=40)
+    draw.arc([100, 100, 400, 400], 180, 240, fill=int(valuesPlot[1]), width=40)
+    draw.arc([100, 100, 400, 400], 240, 300, fill=int(valuesPlot[0]), width=40)
+    draw.arc([100, 100, 400, 400], 300, 0, fill=int(valuesPlot[5]), width=40)
+
+    draw.arc([145, 145, 355, 355], 0, 60, fill=int(valuesPlot[10]), width=40)
+    draw.arc([145, 145, 355, 355], 60, 120, fill=int(valuesPlot[9]), width=40)
+    draw.arc([145, 145, 355, 355], 120, 180, fill=int(valuesPlot[8]), width=40)
+    draw.arc([145, 145, 355, 355], 180, 240, fill=int(valuesPlot[7]), width=40)
+    draw.arc([145, 145, 355, 355], 240, 300, fill=int(valuesPlot[6]), width=40)
+    draw.arc([145, 145, 355, 355], 300, 0, fill=int(valuesPlot[11]), width=40)
+
+    draw.arc([190, 190, 310, 310], 45, 135, fill=int(valuesPlot[14]), width=40)
+    draw.arc([190, 190, 310, 310], 135, 225, fill=int(valuesPlot[13]), width=40)
+    draw.arc([190, 190, 310, 310], 225, 315, fill=int(valuesPlot[12]), width=40)
+    draw.arc([190, 190, 310, 310], 315, 45, fill=int(valuesPlot[15]), width=40)
+
+    #draw.arc([235, 235, 265, 265], 1, 0, fill=int(values[16]), width=40)
+
+    points = [(225, 120), (125, 180), (125, 315), (230, 375), (325, 340), (345, 170), (225, 165), (155, 210), (155, 280), (220, 330), (310, 280), (315, 215), (240, 210), (195, 250), (235, 285), (275, 250), (236, 247)]
+    
+    #alpha=0.5
+    #blended_image = Image.blend(base_image, canvas, alpha)
+
+    for i in range(16):
+        level = valuesOri[i]
+        print(str(i+1)+". Pixel value: "+str(int(valuesOri[i]))+" and Level: "+str(level))
+        draw.text(points[i], str(round(level,1)))
+
+    del draw
+    output = np.array(canvas)
+    return output
+#%%
+saveAHA_Path=os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000","AHA_SingleMap")
+
+def generateSingleAHA(obj,path,crange,cmap):
+    new_min=0
+    new_max=255
+    segmentValueAveList=[]
+    segmentValueStdList=[]
+    segment_16=obj.segment_16
+    for nn,segment_stack in enumerate(segment_16):
+                            #Loop over values in each slice [6, 6, 4]
+
+        for segment in segment_stack:
+            #mask=map_T1.mask_lv[:,:,nn].squeeze()
+            map=obj._map[:,:,nn].squeeze()
+            segmentValueAveList.append(np.mean(map[segment]))
+            segmentValueStdList.append(np.std(map[segment]))
+    crange=crange
+
+    segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+        for value in segmentValueAveList]
+    output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+    '''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+        for value in output]'''
+    #plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+    plt.imshow(output,vmax=255,cmap=cmap)
+    plt.axis('off')
+    #plt.colorbar()
+    aha_img_save_path=os.path.join(saveAHA_Path,f'{obj.CIRC_ID}_{obj.ID}_AHA')
+    if os.path.exists(saveAHA_Path) is False: 
+        os.makedirs(saveAHA_Path)
+    plt.savefig(aha_img_save_path,bbox_inches='tight')
+
+#%%
+
+crangeList=[[800,1500],[20,60],[0.5,2.5]]
+cmapList=['magma','viridis','hot']objList=[map_T1,map_T2,map_DWI]
+for num,obj in enumerate(objList):
+    generateSingleAHA(obj,saveAHA_Path,crangeList[num],cmapList[num])
+
+#%%
+#For clinical map
+crangeList=[[800,1500],[20,60]]
+cmapList=['magma','viridis']
+objList=[map_T1,map_T2]
+for num,obj in enumerate(objList):
+    generateSingleAHA(obj,saveAHA_Path,crangeList[num],cmapList[num])
+#%%
+saveAHA_Path=os.path.join(defaultPath, "saved_ims_v3_June_5_2024","Clinical Map","AHA_SingleMap")
+
+CIRC_ID_List=['500','498','472','446','452','429','419','398','382','381','373']
+for CIRC_NUMBER in CIRC_ID_List:
+    #CIRC_NUMBER=CIRC_ID_List[2]
+    CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
+    print(f'Running{CIRC_ID}')
+    img_root_dir = os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000",CIRC_ID)
+
+    #img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
+    mapList=[]
+    for dirpath,dirs,files in  os.walk(img_root_dir):
+        for x in files:
+            path=os.path.join(dirpath,x)
+            if path.endswith('p.mapping'):
+                if CIRC_ID in os.path.basename(path):
+                    mapList.append(path)
+    map_T1=mapping(mapList[0])
+    map_T2=mapping(mapList[1])
+    #dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
+    #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+    map_DWI=mapping(mapList[2])
+    crangeList=[[800,1500],[20,60],[0.5,2.5]]
+    cmapList=['magma','viridis','hot']
+    objList=[map_T1,map_T2,map_DWI]
+
+    try:
+        for num,obj in enumerate(objList):
+            generateSingleAHA(obj,saveAHA_Path,crangeList[num],cmapList[num])
+    except:
+        print(f'Error in {CIRC_ID}')
+
+#%%
+#Global read value in the excel sheet:
+import pandas as pd
+import os
+import scipy
+dirname=r'C:\Research\MRI\MP_EPI\saved_ims_v3_June_5_2024\WITH8000'
+df=pd.read_csv(os.path.join(dirname,r'mapping_AHA.csv'))
+CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00419', 'CIRC_00429','CIRC_00446','CIRC_00472','CIRC_00486','CIRC_00498','CIRC_00500']    
+ID_list=['MP01','MP02','MP03','T1_MOLLI','T1_MOLLI_FB','T2_FLASH','T2_FLASH_FB']
+df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+df_CIRD=df
+#%%
+index=2
+df_copy=df_CIRD.copy()
+searchfor_T1=[ID_list[i] for i in [index]]
+df_copy=df_copy[df_copy['ID'].str.contains('|'.join(searchfor_T1),case=False)]
+keys_aha=['Basal Anterior', 'Basal Anteroseptal', 'Basal Inferoseptal',
+               'Basal Inferior', 'Basal Inferolateral', 'Basal Anterolateral',
+               'Mid Anterior', 'Mid Anteroseptal', 'Mid Inferoseptal',
+               'Mid Inferior', 'Mid Inferolateral', 'Mid Anterolateral',
+               'Apical Anterior', 'Apical Septal', 
+               'Apical Inferior', 'Apical Lateral']
+segmentValueAveList=[]
+for y_ind,str_read in enumerate(keys_aha):
+    df_tmp_key=df_copy[str_read]
+    df_mean=df_tmp_key.mean()
+    segmentValueAveList.append(df_mean)
+
+
+crange=crangeList[index]
+
+segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+    for value in segmentValueAveList]
+output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+'''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+    for value in output]'''
+%matplotlib inline
+#plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+plt.imshow(output,vmax=255,cmap=cmapList[index])
+plt.axis('off')
+#plt.colorbar()
+aha_img_save_path=os.path.join(saveAHA_Path,f'{ID_list[index]}_{len(df_copy)}_AHA')
+if os.path.exists(saveAHA_Path) is False: 
+    os.makedirs(saveAHA_Path)
+plt.savefig(aha_img_save_path)
+#%%
+#################Clinical Map
+CIRC_ID_List=['500','498','472','446','452','429','419','398','382','381','373']
+for CIRC_NUMBER in CIRC_ID_List:
+    #CIRC_NUMBER=CIRC_ID_List[2]
+    CIRC_ID=f'CIRC_00{CIRC_NUMBER}'
+    print(f'Running{CIRC_ID}')
+    img_root_dir = os.path.join(defaultPath, "saved_ims_v3_June_5_2024","Clinical Map",CIRC_ID)
+
+    #img_root_dir=os.path.join(defaultPath,'saved_ims_v2_Jan_12_2024')
+    mapList=[]
+    for dirpath,dirs,files in  os.walk(img_root_dir):
+        for x in files:
+            path=os.path.join(dirpath,x)
+            if path.endswith('p.mapping'):
+                if CIRC_ID in os.path.basename(path):
+                    mapList.append(path)
+    try:
+        map_T1=mapping(mapList[0])
+        map_T2=mapping(mapList[1])
+        #dicomPath=os.path.join(defaultPath,f'{CIRC_ID}_22737_{CIRC_ID}_22737\MP03_DWI')
+        #MP03 = mapping(data=dicomPath,CIRC_ID=CIRC_ID,reject=False,bFilenameSorted=False)
+        #map_DWI=mapping(mapList[2])
+        crangeList=[[800,1500],[20,60]]
+        cmapList=['magma','viridis']
+        objList=[map_T1,map_T2]
+        for num,obj in enumerate(objList):
+            generateSingleAHA(obj,saveAHA_Path,crangeList[num],cmapList[num])
+    except:
+        print(f'Error in {CIRC_ID}')
+
+#%%
+##########Clinical Map
+dirname=r'C:\Research\MRI\MP_EPI\saved_ims_v3_June_5_2024\Clinical Map'
+df=pd.read_csv(os.path.join(dirname,r'mapping_AHA.csv'))
+CIRC_ID_list=['CIRC_00373','CIRC_00381','CIRC_00382','CIRC_00398','CIRC_00405','CIRC_00419', 'CIRC_00429','CIRC_00446','CIRC_00472','CIRC_00486','CIRC_00498','CIRC_00500']    
+ID_list=['T1_MOLLI','T2_FLASH']
+df_CIRD=df[df['CIRC_ID'].str.contains('|'.join(CIRC_ID_list))]
+df_CIRD=df
+#%%
+index=1
+df_copy=df_CIRD.copy()
+searchfor_T1=[ID_list[i] for i in [index]]
+df_copy=df_copy[df_copy['ID'].str.contains('|'.join(searchfor_T1),case=False)]
+keys_aha=['Basal Anterior', 'Basal Anteroseptal', 'Basal Inferoseptal',
+               'Basal Inferior', 'Basal Inferolateral', 'Basal Anterolateral',
+               'Mid Anterior', 'Mid Anteroseptal', 'Mid Inferoseptal',
+               'Mid Inferior', 'Mid Inferolateral', 'Mid Anterolateral',
+               'Apical Anterior', 'Apical Septal', 
+               'Apical Inferior', 'Apical Lateral']
+segmentValueAveList=[]
+for y_ind,str_read in enumerate(keys_aha):
+    df_tmp_key=df_copy[str_read]
+    df_mean=df_tmp_key.mean()
+    segmentValueAveList.append(df_mean)
+
+
+crange=crangeList[index]
+
+segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+    for value in segmentValueAveList]
+output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+'''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+    for value in output]'''
+%matplotlib inline
+#plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+plt.imshow(output,vmax=255,cmap=cmapList[index])
+plt.axis('off')
+#plt.colorbar()
+aha_img_save_path=os.path.join(saveAHA_Path,f'{ID_list[index]}_{len(df_copy)}_AHA')
+if os.path.exists(saveAHA_Path) is False: 
+    os.makedirs(saveAHA_Path)
+plt.savefig(aha_img_save_path)
+
+
+
+#%%
+#AHA implementation:
+#Normalized to 0-1000
+saveAHA_T1_Path=os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000","AHA_SingleMap")
+new_min=0
+new_max=255
+segmentValueAveList=[]
+segmentValueStdList=[]
+segment_16=map_T1.segment_16
+for nn,segment_stack in enumerate(segment_16):
+                        #Loop over values in each slice [6, 6, 4]
+
+    for segment in segment_stack:
+        #mask=map_T1.mask_lv[:,:,nn].squeeze()
+        map=map_T1._map[:,:,nn].squeeze()
+        segmentValueAveList.append(np.mean(map[segment]))
+        segmentValueStdList.append(np.std(map[segment]))
+
+
+crange=[800,1500]
+
+segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+    for value in segmentValueAveList]
+output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+'''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+    for value in output]'''
 %matplotlib qt
-map_T1.go_define_CoMandRVIns()
-
-#%%
-#Show the center in the first slice
-plt.figure()
-cmap=map_T1.cmap
-crange=map_T1.crange
-plt.imshow(map_T1._map[:,:,0].squeeze(),cmap='gray')
-
-CoMTmp=map_T1.CoM[0]
-aRVIns=map_T1.aRVIns[0]
-iRVIns=map_T1.iRVIns[0]
-#So stupid!!! What the fuck!!!
-# Define points
-anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
-inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
-center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
-
-
-
-plt.plot(*center_of_mass,'ro')
-plt.plot(*inferior_rv_insertion,'ro')
-plt.plot(*anterior_rv_insertion,'ro')
-
-#plt.plot(CoMTmp[1],CoMTmp[0],'ro')
-#plt.plot(aRVIns[1],aRVIns[0],'ro')
-#plt.plot(iRVIns[1],iRVIns[0],'ro')
-#plt.xlim(0,np.shape(map_T1._map)[1])
-#plt.ylim(0,np.shape(map_T1._map)[0])
-plt.show()
-
-#%%
-#Show the insertion of the wheel 
-plt.figure()
-plt.imshow(map_T1.mask_lv[:,:,0].squeeze())
-
-midpoint = (anterior_rv_insertion + inferior_rv_insertion) / 2
-plt.plot(*center_of_mass,'ro')
-plt.plot(*inferior_rv_insertion,'ro')
-plt.plot(*anterior_rv_insertion,'ro')
-#The line not the angle
-plt.plot([center_of_mass[0], anterior_rv_insertion[0]], [center_of_mass[1], anterior_rv_insertion[1]], 'k--')
-plt.plot([center_of_mass[0], inferior_rv_insertion[0]], [center_of_mass[1], inferior_rv_insertion[1]], 'k--')
-plt.plot([center_of_mass[0], midpoint[0]], [center_of_mass[1], midpoint[1]], 'k--')
+#plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+plt.imshow(output,vmax=255,cmap='magma')
+plt.axis('off')
+#plt.colorbar()
+aha_img_save_path=os.path.join(saveAHA_T1_Path,f'{map_T1.CIRC_ID}_{map_T1.ID}_AHA')
+if os.path.exists(saveAHA_T1_Path) is False: 
+    os.makedirs(saveAHA_T1_Path)
+plt.savefig(aha_img_save_path)
+#cv2.imwrite(dirName+'/Bulls_Eye.png', output)
+#cv2.imwrite(dirName+'/Stacked_Output.png', stack)
 
 
 #%%
-# Calculate angles for segment lines
-plt.figure()
-plt.imshow(map_T1.mask_lv[:,:,0].squeeze())
-plt.plot(*center_of_mass,'ro')
-plt.plot(*inferior_rv_insertion,'ro')
-plt.plot(*anterior_rv_insertion,'ro')
-angle1 = np.arctan2(anterior_rv_insertion[1] - center_of_mass[1], anterior_rv_insertion[0] - center_of_mass[0])
-angle2 = np.arctan2(inferior_rv_insertion[1] - center_of_mass[1], inferior_rv_insertion[0] - center_of_mass[0])
-angle3 = (angle1 + angle2) / 2
-
-# Define the six end point for the lines (end point is needed to make sure it covers the whole mask_LV)
-# Also get the CoM
-#Define the 3 lines based on the CoM and each end point
-#First line: bisector
-line_length = 40  # Adjust the length of the line, to make sure it's long enough to cover the mask_LV
-bisector_start= center_of_mass - line_length * np.array([np.cos(angle3), np.sin(angle3)])
-bisector_end = center_of_mass + line_length * np.array([np.cos(angle3), np.sin(angle3)])
-#Second line: the anterior part
-line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
-anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
-anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
-#Thrid line: the inferior part
-inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
-inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
-
-plt.plot([bisector_start[0], bisector_end[0]], [bisector_start[1], bisector_end[1]], 'k--')
-plt.plot([anterior_start[0], anterior_end[0]], [anterior_start[1], anterior_end[1]], 'k--')
-plt.plot([inferior_start[0], inferior_end[0]], [inferior_start[1], inferior_end[1]], 'k--')
-
-#%%
-from skimage.draw import polygon2mask
-#Define the first coordinate:
-Nx=map_T1.Nx
-Ny=map_T1.Ny
-coordinates = (bisector_start, center_of_mass, anterior_start) #3 points
-#Sometimes it's reverted
-coordinates = [[y,x] for [x,y] in coordinates]
-polygon = np.array(coordinates)
-mask = polygon2mask([Nx,Ny], polygon)
-plt.figure()
-mask2=np.logical_and(mask,map_T1.mask_lv[:,:,0])
-plt.imshow(mask2)
-plt.show()
-
-
-#%%
-#Find the overlap between three part
-
-mask_lv_nn=map_T1.mask_lv[:,:,0]
-def coordinate2mask(coordinates,mask_lv_nn,Nx,Ny):
-            #for skimage it's reverted
-            coordinates = [[y,x] for [x,y] in coordinates]
-            polygon = np.array(coordinates)
-            #Use the polygon2mask fuction for mask generation
-            mask_tmp = polygon2mask([Nx,Ny], polygon)
-            #Found the overlap between mask_seg and mask_lv_nn
-            mask_seg=np.logical_and (mask_tmp, mask_lv_nn)
-            return mask_seg
-
-coordinates = (inferior_end, center_of_mass, anterior_start)
-mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny) *1
-
-coordinates = (bisector_start, center_of_mass, anterior_start)
-mask_seg2=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*2
-
-coordinates = (bisector_start, center_of_mass, inferior_start)
-mask_seg3=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*3
-
-coordinates = (anterior_end, center_of_mass, inferior_start)
-mask_seg4=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*4
-
-coordinates = (anterior_end, center_of_mass, bisector_end)
-mask_seg5=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*5
-
-coordinates = (inferior_end, center_of_mass, bisector_end)
-mask_seg6=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)*6
-
-maskFinal=mask_seg+mask_seg2+mask_seg3+mask_seg4+mask_seg5+mask_seg6
-
-plt.imshow(maskFinal,vmax=6)
-plt.show()
-#%%
-segment_16=[]
-mask_lv_nn=map_T1.mask_lv[:,:,2].squeeze()
-#For the first slice:
-CoMTmp=map_T1.CoM[2]
-aRVIns=map_T1.aRVIns[2]
-iRVIns=map_T1.iRVIns[2]
-# Define points
-#The x and y is reversed from previously 
-anterior_rv_insertion = np.array([aRVIns[1], aRVIns[0]])  # example coordinates
-inferior_rv_insertion = np.array([iRVIns[1], iRVIns[0]])  # example coordinates
-center_of_mass = np.array([CoMTmp[1], CoMTmp[0]])  # example coordinates (center)
-
-#Second line: the anterior part
-line_scale=1.5   #Random value to make sure it's long enough to cover the Mask_LV
-anterior_start=center_of_mass - line_scale * (center_of_mass-anterior_rv_insertion)
-anterior_end=center_of_mass + line_scale * (center_of_mass-anterior_rv_insertion)
-#Thrid line: the inferior part
-inferior_start=center_of_mass - line_scale * (center_of_mass-inferior_rv_insertion)
-inferior_end=center_of_mass + line_scale * (center_of_mass-inferior_rv_insertion)
-
-#Number 13 Seg: Anterior 
-coordinates = (inferior_end, center_of_mass, anterior_start)
-mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-segment_16.append(mask_seg)
-
-#Number 14 Seg: Septal 
-coordinates = (inferior_start, center_of_mass, anterior_start)
-mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-segment_16.append(mask_seg)
-
-#Number 15 Seg:  Inferior
-coordinates = (anterior_end, center_of_mass, inferior_start)
-mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-segment_16.append(mask_seg)
-
-#Number 16 Seg:  Lateral
-coordinates = (anterior_end, center_of_mass, inferior_end)
-mask_seg=coordinate2mask(coordinates,mask_lv_nn,Nx,Ny)
-segment_16.append(mask_seg)
-maskFinal=np.zeros((Nx,Ny),dtype=int)
-for nn,masktmp in enumerate(segment_16):
-    maskFinal+=segment_16[nn] *(nn+1)
-
-plt.imshow(maskFinal,vmax=4)
-plt.show()
-
-#%%
-#Copy the map from T1 T2 and ADC
-map_T1.go_get_AHA_wheel()
-
-map_T2._update_mask(map_T1)
-map_DWI._update_mask(map_T1)
+saveAHA_Path=os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000","AHA_SingleMap")
+new_min=0
+new_max=255
+segmentValueAveList=[]
+segmentValueStdList=[]
 segment_16=map_T2.segment_16
-maskFinal=np.zeros((Nx,Ny),dtype=int)
-for nn,masktmp in enumerate(segment_16):
-    maskFinal+=segment_16[nn] *(nn+1)
-plt.imshow(maskFinal,vmax=18)
-plt.show()
+for nn,segment_stack in enumerate(segment_16):
+                        #Loop over values in each slice [6, 6, 4]
+
+    for segment in segment_stack:
+        #mask=map_T1.mask_lv[:,:,nn].squeeze()
+        map=map_T2._map[:,:,nn].squeeze()
+        segmentValueAveList.append(np.mean(map[segment]))
+        segmentValueStdList.append(np.std(map[segment]))
+
+
+crange=[20,60]
+
+segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+    for value in segmentValueAveList]
+output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+'''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+    for value in output]'''
+%matplotlib qt
+#plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+plt.imshow(output,vmax=255,cmap='viridis')
+plt.axis('off')
+#plt.colorbar()
+aha_img_save_path=os.path.join(saveAHA_Path,f'{map_T2.CIRC_ID}_{map_T2.ID}_AHA')
+if os.path.exists(saveAHA_Path) is False: 
+    os.makedirs(saveAHA_Path)
+plt.savefig(aha_img_save_path)
+#cv2.imwrite(dirName+'/Bulls_Eye.png', output)
+#cv2.imwrite(dirName+'/Stacked_Output.png', stack)
+#%%
+saveAHA_Path=os.path.join(defaultPath, "saved_ims_v3_June_5_2024","WITH8000","AHA_SingleMap")
+new_min=0
+new_max=255
+segmentValueAveList=[]
+segmentValueStdList=[]
+segment_16=map_DWI.segment_16
+for nn,segment_stack in enumerate(segment_16):
+                        #Loop over values in each slice [6, 6, 4]
+
+    for segment in segment_stack:
+        #mask=map_T1.mask_lv[:,:,nn].squeeze()
+        map=map_DWI._map[:,:,nn].squeeze()
+        segmentValueAveList.append(np.mean(map[segment]))
+        segmentValueStdList.append(np.std(map[segment]))
+
+
+crange=[0.5,2.5]
+
+segmentValueAveListPlot=[ new_min + (value - crange[0]) * (new_max - new_min) / (crange[1] - crange[0])
+    for value in segmentValueAveList]
+output=bullsEye(segmentValueAveListPlot,segmentValueAveList)
+'''outputPlot=[ crange[0] + (value - 0) * (crange[1] - crange[0]) / (255 - 0)
+    for value in output]'''
+%matplotlib qt
+#plt.imshow(outputPlot,vmax=crange[1],cmap='magma')
+plt.imshow(output,vmax=255,cmap='hot')
+plt.axis('off')
+#plt.colorbar()
+aha_img_save_path=os.path.join(saveAHA_Path,f'{map_DWI.CIRC_ID}_{map_DWI.ID}_AHA')
+if os.path.exists(saveAHA_Path) is False: 
+    os.makedirs(saveAHA_Path)
+plt.savefig(aha_img_save_path)
+
+#%%
+
 
 #%%
 
