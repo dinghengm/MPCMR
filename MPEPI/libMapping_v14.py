@@ -73,7 +73,7 @@ class mapping:
     # data can be path to data or it can be numpy data
     def __init__(self, data=None, bval=None, bvec=None,CIRC_ID='',
                 ID=None,valueList=[],datasets=None,
-                UIPath=None,TE=None,sortBy='tval',reject=True,default=327,sigma=75,bFilenameSorted=True): 
+                UIPath=None,TE=None,sortBy='tval',reject=True,default=327,sigma=75,bFilenameSorted=True,searchForMappingObj=False): 
         
         '''
         Define class object and read in data
@@ -92,6 +92,17 @@ class mapping:
           #Development Mode
         if type(data) == str: #given a path so try to load in the data
             tmp=data
+            #Try to find if the mapping file is already in the 
+            if ID !=None and searchForMappingObj==True:
+                try:
+                    #This is for the default setting
+                    #Where you don't change the ID.
+                    filename=os.path.join(os.path.dirname(data),f'{ID}_p.mapping')
+                    print('Loading in CIRC mapping object')
+                    self._load(filename=filename)
+                    return
+                except:
+                    pass
             if data.split('.')[-1] == 'mapping':
                 print('Loading in CIRC mapping object')
                 self._load(filename=data)
@@ -200,7 +211,7 @@ class mapping:
 
                 #valueList=sorted(valueList)
                 valueList=[i+TE for i in valueList[::Nz]]
-                self.valueList=valueList
+                #self.valueList=valueList
                 print('value:',valueList)
                 self.valueList=valueList
                 self.crange=[0,3000]
@@ -629,27 +640,30 @@ class mapping:
             Nx,Ny,Nz,Nd=np.shape(data)
         if len(np.shape(data))==3 or Nz==1:
             NxNy=int(Nx*Ny)
-            finalMap=np.zeros((Nx,Ny,1))
-            finalRa=np.zeros((Nx,Ny,1))
-            finalRb=np.zeros((Nx,Ny,1))
-            finalRes=np.zeros((Nx,Ny,1))
+            finalMap=np.zeros((Nx*Ny,1))
+            finalRa=np.zeros((Nx*Ny,1))
+            finalRb=np.zeros((Nx*Ny,1))
+            finalIndex=np.zeros((Nx*Ny,1),dtype=int)
+            finalRes=np.zeros((Nx*Ny,1))
         elif len(np.shape(data))==4:
             Nx,Ny,Nz,Nd=np.shape(data)
-            finalMap=np.zeros((Nx,Ny,Nz))
-            finalRa=np.zeros((Nx,Ny,Nz))
-            finalRb=np.zeros((Nx,Ny,Nz))
-            finalRes=np.zeros((Nx,Ny,Nz))
+            finalMap=np.zeros((Nx*Ny,Nz))
+            finalRa=np.zeros((Nx*Ny,Nz))
+            finalRb=np.zeros((Nx*Ny,Nz))
+            finalIndex=np.zeros((Nx*Ny,Nz),dtype=int)
+            finalRes=np.zeros((Nx*Ny,Nz))
             NxNy=int(Nx*Ny)
         #Calculate all slices
-        dataTmp=np.copy(data)
-        for z in tqdm(range(Nz)):
-            for x in range(Nx):
-                for y in range(Ny):
-                    
-                    finalMap[x,y,z],finalRa[x,y,z],finalRb[x,y,z],_,finalRes[x,y,z]=ir_fit(dataTmp[x,y,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,
-                T1bound=T1bound,invertPoint=invertPoint)
-        self._map=finalMap
-        return finalMap,finalRa,finalRb,finalRes
+        dataTmp=np.reshape(data,(NxNy,Nz,Nd))
+        for z in range(Nz):
+            for nn in range(NxNy):
+                finalMap[nn,z],finalRa[nn,z],finalRb[nn,z],finalIndex[nn,z],finalRes[nn,z]=ir_fit(dataTmp[nn,z],TIlist=TIlist,ra=ra,rb=rb,T1=T1,type=type,error=error,Niter=Niter,searchtype=searchtype,T1bound=T1bound,invertPoint=invertPoint)
+        self._map=finalMap.reshape(Nx,Ny,Nz)
+        self._error=finalRes.reshape(Nx,Ny,Nz)
+        #self._finalIndexList=finalIndex.reshape(Nx,Ny,Nz)
+        self._finalRa=finalRa.reshape(Nx,Ny,Nz)
+        self._finalRb=finalRb.reshape(Nx,Ny,Nz)
+        return finalMap.reshape(Nx,Ny,Nz),finalRa.reshape(Nx,Ny,Nz),finalRb.reshape(Nx,Ny,Nz),finalRes.reshape(Nx,Ny,Nz)
 
         
     def go_t2_fit(self,data=None,TElist=None,Mz=None,T2=None,method='exp'):
@@ -786,7 +800,8 @@ class mapping:
             ind = np.where(self.mask_endo[..., z]>0)
             self.CoM[z] = np.array([np.mean(ind[0]), np.mean(ind[1])])
 
-            
+    
+
     
     def go_create_GIF(self,path_dir=None,CIRC_ID=None,ID=None,data=None):
         if data is None:
@@ -1689,6 +1704,8 @@ class mapping:
             self.__dict__.update(importDiffusion.__dict__)
 
             print('Successfully loaded in diffusion data!!')
+            print(f'The shape is {np.shape(self._map)}, ')
+        
         except:
             print('Failed loading in *.diffusion data!')
 

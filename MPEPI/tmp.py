@@ -120,7 +120,8 @@ def generateSingleAHA(obj,path,crange,cmap):
 #%%
 
 crangeList=[[800,1500],[20,60],[0.5,2.5]]
-cmapList=['magma','viridis','hot']objList=[map_T1,map_T2,map_DWI]
+cmapList=['magma','viridis','hot']
+objList=[map_T1,map_T2,map_DWI]
 for num,obj in enumerate(objList):
     generateSingleAHA(obj,saveAHA_Path,crangeList[num],cmapList[num])
 
